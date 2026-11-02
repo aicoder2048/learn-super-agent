@@ -1,0 +1,10 @@
+.env
+**/.env
+.DS_Store
+__pycache__/
+
+# 原文与原图版权归 DeepSeek，不随仓库分发；用 lessons/tools/fetch_article.py 在本地取回
+docs/articles/super-agent-design-exploration.md
+docs/articles/super-agent-design-exploration.original.html
+docs/articles/img/
+lessons/img/

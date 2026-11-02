@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>面向人的交互 · SA05</title>
+<link rel="stylesheet" href="assets/sa-lesson.css">
+<script src="assets/glossary-data.js"></script>
+<script src="assets/sa-lib.js"></script>
+<style>
+  .out-box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 12px 14px; font-size: 14px; line-height: 1.75; white-space: pre-wrap; min-height: 120px; }
+  .out-box.im { max-width: 560px; border-radius: 14px; background: var(--note-bg); border-color: var(--note-bd); }
+  .out-box.silent { color: var(--ink-3); font-style: italic; text-align: center; display: grid; place-items: center; }
+  .out-box code { font-size: 12.5px; }
+  .chk { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
+  .chk li::before { content: "○ "; color: var(--ink-3); }
+  .chk li.ok::before { content: "✓ "; color: var(--up); font-weight: 700; }
+  .chk li.no::before { content: "✗ "; color: var(--down); font-weight: 700; }
+  .chk li.no { color: var(--down); }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .row2 { grid-template-columns: 1fr; } }
+  .sub-h { font-size: 12.5px; color: var(--ink-3); margin: 0 0 6px; letter-spacing: .05em; }
+</style>
+</head>
+<body>
+<header id="sa-topbar"></header>
+
+<div class="layout">
+<aside class="toc">
+  <h4>本课目录</h4>
+  <ol>
+    <li><a href="#s1">两个交互问题</a></li>
+    <li><a href="#s2">经典 ReAct Loop 为什么会“卡住”</a></li>
+    <li><a href="#s3">异步 ReAct Loop（动手）</a></li>
+    <li><a href="#s4">多信道交互</a></li>
+    <li><a href="#s5">同一结果，三种说法（动手）</a></li>
+    <li><a href="#s6">自测与速记</a></li>
+  </ol>
+</aside>
+
+<main>
+<div class="hero">
+  <div class="kicker">SA05 · 交互与运行</div>
+  <h1>面向人的交互：全双工与多信道</h1>
+  <p>双层架构从上下文层面保证了连续。但人真正感受到的，是“它干活时还理不理我”和“它说话吵不吵”。这一课讲原文怎样在交互方式和交互渠道上解决这两件事。</p>
+  <div class="meta"><span>原文：§4 面向人的交互</span><span>阅读约 15 分钟</span><span>含 2 个互动演示、1 张原文图</span></div>
+</div>
+
+<div class="objectives">
+  <h4>学完本课，你能够：</h4>
+  <ul>
+    <li>说明经典 <a class="term" href="glossary.html#react-loop">ReAct Loop</a> 为什么是<a class="term" href="glossary.html#half-duplex">半双工</a>，阻塞发生在哪一步。</li>
+    <li>描述<a class="term" href="glossary.html#async-react">异步 ReAct Loop</a> 的 <a class="term" href="glossary.html#start-stop">start() / stop()</a> 机制，并用时间线比较两者的响应等待。</li>
+    <li>说出 IM 类即时信道与 GitHub/邮件类异步信道的输出规范，包括“单次回复不超过 100 词”。</li>
+    <li>解释双层架构如何天然地把冗长推理和工具调用挡在外部信道之外。</li>
+  </ul>
+</div>
+
+<!-- ============ 1 ============ -->
+<section class="lesson-sec" id="s1">
+  <h2><span class="num">01</span>两个交互问题</h2>
+  <p>先说结论：要在真实的人机交互里同时做到<b>连续</b>和<b>高效</b>，原文认为还要解决两个问题。</p>
+  <div class="grid-2">
+    <div class="kp"><div class="k">问题一 · 交互方式 · §4.1</div><div class="v">别让后台阻塞前台</div><p>后台在跑耗时操作时，会话也要能随时接受新指令，不必等上一个命令或任务完成。解法：<b>异步 ReAct Loop</b>。</p></div>
+    <div class="kp"><div class="k">问题二 · 交互渠道 · §4.2</div><div class="v">输出匹配信道</div><p>交互发生在用户熟悉的不同工作信道里。系统的输出方式要匹配这个信道的带宽和人的使用习惯。</p></div>
+  </div>
+  <div class="callout note"><span class="ttl">补充：和第 2 课的关系</span>双层架构（<a href="SA02-two-layer.html">SA02</a>）解决的是“用户面对的始终是同一个 Agent”。但如果这一个 Agent 每做一件事就“失联”几分钟，或者把推理过程刷满群聊，用户仍然觉得它不好用。§4 补的就是这最后一公里。</div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section class="lesson-sec" id="s2">
+  <h2><span class="num">02</span>经典 ReAct Loop 为什么会“卡住”</h2>
+  <p>在经典 ReAct Loop 中，模型发起一次<b>同步</b>的 <code>run()</code> 工具调用后，循环会阻塞。它要等工具执行完毕、返回最终结果，才进入下一步。在这期间，会话<b>无法响应任何新的用户输入</b>。</p>
+  <p>这就是<a class="term" href="glossary.html#half-duplex">半双工</a>：像对讲机，一方说完，另一方才能说。要消除阻塞，就要把对话从一问一答的半双工模式，转变为<a class="term" href="glossary.html#full-duplex">全双工</a>模式。</p>
+  <figure class="fig"><img src="img/fig10.jpg" alt="经典 ReAct Loop 与异步 ReAct Loop 对比"><figcaption><b>原文图 10</b>经典 ReAct Loop 与异步 ReAct Loop 对比：异步调用立即返回 Started 通知，后台工具运行期间仍可响应新消息。</figcaption></figure>
+  <div class="callout tip"><span class="ttl">看图要点</span>上半部分，中间那段虚线框“同步阻塞等待工具返回”就是用户被晾着的时间。下半部分，同样长的工具在后台跑，前台却插进了“用户消息 2 → LLM Call 即时回复”。工具完成后，结果作为“新消息投递”进来，再由一次 LLM Call 交付。</div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="lesson-sec" id="s3">
+  <h2><span class="num">03</span>异步 ReAct Loop（动手）</h2>
+  <p>原文的做法：把耗时的命令和子任务工具调用改成异步的 <code>start()</code> 和 <code>stop()</code>，构成<b>异步 ReAct Loop</b>。</p>
+  <ol class="steps">
+    <li>模型调用 <code>start()</code> 后，<b>立即</b>收到“已启动（Started）”的返回。循环不再等待这个工具。</li>
+    <li>后台工具执行完成后，系统把最终结果<b>作为一条新的事件消息</b>投递进会话。</li>
+    <li>模型也可以根据上下文调用 <code>stop()</code>，主动终止执行时间过长的后台命令。</li>
+  </ol>
+  <p>这样，前台对话响应和后台任务执行就解耦了。Agent 在后台跑耗时任务时，也能响应人的输入。<b>新输入在当前推理步结束后即被处理</b>，不必等后台工具完成。</p>
+  <div class="callout warn"><span class="ttl">原文限定</span>这一异步任务机制已经在 DeepSeek Harness 中实现，但<b>尚未默认开启</b>。</div>
+
+  <div class="chart-card" id="demo1">
+    <div class="chart-head">
+      <div class="chart-title">演示：用户在工具运行时发来第二条消息</div>
+      <label class="ctrl">工具耗时 = <b id="d1-dv">60</b> 秒 <input id="d1-d" type="range" min="10" max="180" step="5" value="60"></label>
+      <label class="ctrl">消息 2 到达 = 工具开始后 <b id="d1-mv">5</b> 秒 <input id="d1-m" type="range" min="0" max="170" step="1" value="5"></label>
+      <label class="ctrl"><input id="d1-stop" type="checkbox"> 消息 2 是“停下，改用方案 B”</label>
+    </div>
+    <div class="legend"><span><i style="background:#3d7be8"></i>LLM 推理步</span><span><i style="background:#16a085"></i>工具在跑</span><span><i style="background:#8a94a3"></i>前台阻塞</span><span><i style="background:#d64541"></i>工具被 stop()</span><span><i style="background:#c9a227"></i>竖线：消息 2 到达</span></div>
+    <div class="demo" id="d1-lanes"></div>
+    <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
+    <div class="chart-foot" id="d1-foot">拖动“消息 2 到达”。经典版里，不管消息何时到，都要等工具跑完。异步版里，等待只取决于“当前推理步还剩多久”。把消息 2 拖到刚收到 Started 的那几秒里，你会看到异步版也要稍等——因为模型正在处理 Started 通知，新输入要等这一步结束。勾选“停下”，看 <code>stop()</code> 能省掉多少白跑的工具时间。<br><span class="data-note">简化模型：每个 LLM 推理步固定 4 秒；经典版在工具返回后，下一步同时看到结果和消息 2。数字只用来说明机制，不是原文实验。</span></div>
+  </div>
+  <div class="callout note"><span class="ttl">补充：熟悉的影子</span>这是操作系统和网络编程里“阻塞 I/O → 异步 I/O”的老路：发起读请求后不干等，先去处理别的事，数据到了再通过事件通知回来。<code>start()</code> 像提交一个异步请求，“结果作为新事件投递”像完成回调，<code>stop()</code> 像取消请求。这个类比是课程作者的解释。</div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section class="lesson-sec" id="s4">
+  <h2><span class="num">04</span>多信道交互</h2>
+  <p>先说结论：<b>不同工作信道的信息密度和交互习惯不同，系统的输出要与之匹配。</b></p>
+  <p>反面例子是：把面向单人终端的交互方式直接搬进群聊，把冗长的推理过程和密集的工具调用原样输出。在多人协作中，这极易造成信息过载。</p>
+  <div class="callout rule"><span class="ttl">双层架构已经解决了一半</span>具体任务中冗长的推理过程和密集的工具调用，都被隔离在 <a class="term" href="glossary.html#worker">Worker</a> Session 内部，不会直接输出到外部信道。对外交互由 <a class="term" href="glossary.html#router">Router 层</a>统一负责。</div>
+  <p>在此基础上，系统还要接入用户日常使用的各类工作环境，并<b>通过提示词</b>针对不同信道定制交互规范：</p>
+  <div class="vs">
+    <div><h4>IM 等即时通讯信道</h4><p>侧重<b>低打扰的轻量沟通</b>。</p><ul><li>像人类同事一样，只在需要决策或验收时发送通知。</li><li>只问直接问题，给简短结论。</li><li>原文验证过的一条简单有效的硬性规定：<b>单次回复不超过 100 词</b>。</li></ul></div>
+    <div><h4>GitHub、邮件与文档等异步信道</h4><p>侧重<b>结构化、高信息密度的异步交付</b>。</p><ul><li>创建或更新 Pull Request 时，按项目规范写完整的问题背景、改动说明与验证结果。</li><li>个人助手场景下，直接起草结构化的邮件与文档摘要。</li></ul></div>
+  </div>
+  <div class="callout note"><span class="ttl">补充：为什么规则写在提示词里</span>信道规范是“软规则”：它描述语气、长度、什么时候说话。原文选择用提示词表达，团队可以随时用自然语言调整。开源原型也是这样做的：团队提示词里有 Communication（沟通方式）一节（见 <a href="SA08-prototype.html">SA08</a>）。</div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section class="lesson-sec" id="s5">
+  <h2><span class="num">05</span>同一结果，三种说法（动手）</h2>
+  <p>下面是同一个任务（“登录偶发超时”）在不同阶段、不同信道里的输出示例。切换信道和情形，看输出怎么变，右边的检查表会实时判断它是否符合原文的信道规范。</p>
+
+  <div class="chart-card" id="demo2">
+    <div class="chart-head">
+      <div class="chart-title">演示：多信道输出规范检查</div>
+      <div class="btn-group" id="d2-ch"><button class="btn on" type="button" data-v="im">IM 群聊</button><button class="btn" type="button" data-v="gh">GitHub PR</button><button class="btn" type="button" data-v="mail">邮件</button></div>
+      <div class="btn-group" id="d2-sc"><button class="btn on" type="button" data-v="done">已修复，待验收</button><button class="btn" type="button" data-v="decide">需要你决策</button><button class="btn" type="button" data-v="wip">仍在进行</button></div>
+      <label class="ctrl"><input id="d2-bad" type="checkbox"> 反面：把终端输出原样搬过来</label>
+    </div>
+    <div class="demo">
+      <div class="row2">
+        <div><p class="sub-h" id="d2-where"></p><div class="out-box" id="d2-box"></div></div>
+        <div><p class="sub-h">规范检查</p><ul class="chk" id="d2-chk"></ul></div>
+      </div>
+    </div>
+    <div class="chart-body" style="padding:0 16px"><div class="readout" id="d2-out"></div></div>
+    <div class="chart-foot">先看 IM：“仍在进行”时，正确做法是<b>不发消息</b>。再勾选“反面”，看终端式输出怎样一次违反好几条规范。最后切到 GitHub PR：同样的内容，那里需要的恰恰是完整、结构化的长文。<br><span class="data-note">词数口径：英文、数字、代码按空格和标点切分计词；中文没有空格，这里按“每 2 个汉字约 1 词”粗略折算。原文没有说明中文的计数口径，这只是演示用的近似。示例文本为虚构。</span></div>
+  </div>
+  <div class="callout tip"><span class="ttl">一句话记住</span>IM 里，Agent 像一个话少、靠谱的同事；GitHub 和邮件里，它像一个写文档很认真的同事。同一个 Router，靠提示词切换这两种“人设”。</div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section class="lesson-sec" id="s6">
+  <h2><span class="num">06</span>自测与速记</h2>
+  <div class="quiz" data-answer="2">
+    <div class="q">在异步 ReAct Loop 中，模型调用 <code>start()</code> 后会发生什么？</div>
+    <div class="opts"><button>循环阻塞，直到工具返回最终结果</button><button>系统自动创建一个新的 Worker Session</button><button>立即收到“已启动（Started）”的返回，循环不再等待该工具；完成后结果作为新事件消息投递进会话</button><button>工具在前台运行，用户输入被缓存到工具结束</button></div>
+    <div class="explain">原文 §4.1：调用 start() 后立即收到 Started；后台工具完成后，系统再把最终结果作为一条新的事件消息投递进会话。</div>
+  </div>
+  <div class="quiz" data-answer="1">
+    <div class="q">异步 ReAct Loop 下，用户的新输入什么时候被处理？</div>
+    <div class="opts"><button>立刻打断正在进行的 LLM 推理</button><button>在当前推理步结束后即被处理，不必等待后台工具完成</button><button>等后台工具全部完成后</button><button>由 Watchdog 定时转交</button></div>
+    <div class="explain">原文原话：“新输入在当前推理步结束后即被处理，不必等待后台工具完成。”它不打断正在进行的推理步。</div>
+  </div>
+  <div class="quiz" data-answer="3">
+    <div class="q">关于异步任务机制在 DeepSeek Harness 中的状态，原文怎么说？</div>
+    <div class="opts"><button>尚在设计中，未实现</button><button>已实现并默认开启</button><button>只在开源原型中实现</button><button>已经实现，但尚未默认开启</button></div>
+    <div class="explain">原文 §4.1 末句：“这一异步任务机制已经在 DeepSeek Harness 中实现，但尚未默认开启。”</div>
+  </div>
+  <div class="quiz" data-answer="0">
+    <div class="q">原文在 IM 信道验证过的一条简单有效的硬性规定是？</div>
+    <div class="opts"><button>单次回复不超过 100 词</button><button>每 10 分钟汇报一次进展</button><button>每条回复都附上推理过程</button><button>只用英文回复</button></div>
+    <div class="explain">原文 §4.2：IM 侧重低打扰的轻量沟通，只在需要决策或验收时通知，只问直接问题、给简短结论；验证过的硬规定是单次回复不超过 100 词。</div>
+  </div>
+
+  <h3>速记表</h3>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>要点</th><th>一句话</th></tr>
+    <tr><td>经典 ReAct Loop</td><td>同步 run()，阻塞到工具返回，期间不响应新输入 → 半双工</td></tr>
+    <tr><td>异步 ReAct Loop</td><td>start() 立即返回 Started；结果作为新事件投递；stop() 终止过长命令 → 全双工</td></tr>
+    <tr><td>新输入</td><td>当前推理步结束后即处理，不等后台工具</td></tr>
+    <tr><td>落地状态</td><td>已在 DeepSeek Harness 实现，尚未默认开启</td></tr>
+    <tr><td>多信道原则</td><td>输出匹配信道的信息密度与习惯</td></tr>
+    <tr><td>双层的贡献</td><td>冗长推理和工具调用隔离在 Worker 内；Router 统一对外</td></tr>
+    <tr><td>IM</td><td>低打扰；只在决策/验收时通知；直接问题 + 简短结论；≤ 100 词</td></tr>
+    <tr><td>GitHub / 邮件 / 文档</td><td>结构化、高密度：问题背景、改动说明、验证结果；结构化摘要</td></tr>
+  </table></div>
+
+  <h3>相关课程</h3>
+  <div class="related">
+    <a href="SA04-context-speculation.html"><small>上一课 · SA04</small>事件驱动（下）：上下文组织与提前行动</a>
+    <a href="SA06-separation-watchdog.html"><small>下一课 · SA06</small>存算分离与 Watchdog</a>
+    <a href="SA02-two-layer.html"><small>SA02</small>双层架构：Router 与 Worker</a>
+  </div>
+</section>
+
+<nav id="sa-pager" data-current="SA05-human-interaction.html"></nav>
+<p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§4（2026-10-31）。标为“补充”的内容和模拟演示是课程作者的解释，不是原文观点；示例消息为虚构。</p>
+</main>
+</div>
+
+<script>
+SA.onReady(function () {
+  /* ---- 1. 同步 vs 异步 ReAct Loop ---- */
+  const L = 4;
+  function draw1() {
+    const D = +SA.$("#d1-d").value, mEl = SA.$("#d1-m");
+    mEl.max = D - 1; if (+mEl.value > D - 1) mEl.value = D - 1;
+    const m = +mEl.value, stopIt = SA.$("#d1-stop").checked;
+    SA.$("#d1-dv").textContent = D; SA.$("#d1-mv").textContent = m;
+    const tm = L + m; // 消息 2 的绝对到达时刻
+
+    // 经典：0–L 调 run()；L–L+D 工具 + 前台阻塞；L+D–L+D+L 回复（同时看到结果和消息 2）
+    const sReply = L + D + L, sWait = sReply - tm;
+    const sFront = [{ t0: 0, t1: L, cls: "c1", text: "LLM: run()" }, { t0: L, t1: L + D, cls: "c6", text: "阻塞等待工具返回" }, { t0: L + D, t1: sReply, cls: "c1", text: "回复" }];
+    const sTool = [{ t0: L, t1: L + D, cls: "c3", text: "工具" }];
+
+    // 异步：0–L 调 start()；L 收到 Started → L–2L 一步（告诉用户“已开始”）
+    const aFront = [{ t0: 0, t1: L, cls: "c1", text: "start()" }, { t0: L, t1: 2 * L, cls: "c1", text: "Started" }];
+    let free = 2 * L;
+    const r0 = Math.max(tm, free), r1 = r0 + L; // 消息 2 在当前推理步结束后处理
+    aFront.push({ t0: r0, t1: r1, cls: "c1", text: stopIt ? "stop() + 回复" : "即时回复" });
+    free = r1;
+    const aWait = r1 - tm;
+    let aTool, toolEnd, wasted;
+    if (stopIt) {
+      toolEnd = Math.min(r1, L + D);
+      aTool = [{ t0: L, t1: toolEnd, cls: "c3", text: "后台工具" }];
+      if (toolEnd < L + D) aTool.push({ t0: toolEnd, t1: L + D, cls: "c5", text: "已终止" });
+      wasted = toolEnd - L;
+    } else {
+      toolEnd = L + D;
+      aTool = [{ t0: L, t1: toolEnd, cls: "c3", text: "后台工具" }];
+      const d0 = Math.max(toolEnd, free);
+      aFront.push({ t0: d0, t1: d0 + L, cls: "c1", text: "交付结果" });
+      wasted = 0;
+    }
+    const t1 = Math.max(sReply, ...aFront.map((s) => s.t1)) + 2;
+    SA.lanes("#d1-lanes", [
+      { name: "经典 · 前台", segs: sFront, ticks: [tm] },
+      { name: "经典 · 工具", segs: sTool },
+      { name: "异步 · 前台", segs: aFront, ticks: [tm] },
+      { name: "异步 · 后台", segs: aTool },
+    ], { t1, unit: " 秒" });
+    const sWasted = stopIt ? D : 0;
+    SA.$("#d1-out").textContent =
+      "消息 2 在第 " + tm + " 秒到达\n" +
+      "经典 ReAct Loop：第 " + sReply + " 秒才回应，用户等了 " + sWait + " 秒\n" +
+      "异步 ReAct Loop：第 " + r1 + " 秒回应，用户等了 " + aWait + " 秒" + (r0 > tm ? "（其中 " + (r0 - tm) + " 秒在等当前推理步结束）" : "") + "\n" +
+      (stopIt ? "“停下”：经典版的工具白跑了 " + sWasted + " 秒才得知要停；异步版在第 " + toolEnd + " 秒调用 stop()，工具只跑了 " + wasted + " 秒。"
+              : "工具结果：经典版在回复里一起交付；异步版在工具完成后作为新事件投递，再用一步交付。");
+  }
+  ["#d1-d", "#d1-m"].forEach((id) => SA.$(id).addEventListener("input", draw1));
+  SA.$("#d1-stop").addEventListener("change", draw1);
+  draw1();
+
+  /* ---- 2. 多信道输出 ---- */
+  const T = {
+    im: {
+      done: "@张三 登录偶发超时已修好：重试改为 3 次，并加了指数退避。PR #1902 已通过 CI，请你验收。",
+      decide: "@张三 重试改成 3 次后，高峰期失败率会略升。二选一：A. 3 次 + 指数退避；B. 保持 5 次，只加退避。选哪个？",
+      wip: null,
+    },
+    gh: {
+      done: "## 问题背景\n登录接口在高峰期偶发超时（#1873）。日志显示重试 5 次且无间隔，放大了下游压力。\n\n## 改动说明\n- `src/auth/login.ts`：重试次数 5 → 3，加入指数退避（200ms 起，倍数 2）。\n- 新增 `retryWithBackoff` 单元测试 6 个。\n\n## 验证结果\n- `npm test`：218 通过，0 失败。\n- 压测脚本 `bench/login.js`：p99 从 2.4s 降到 1.1s，超时 0 次。\n\nCloses #1873",
+      decide: "## 需要决策：重试策略\n复现确认：问题来自无间隔的 5 次重试。有两个修法：\n\n| 方案 | 改动 | 压测 p99 | 风险 |\n|---|---|---|---|\n| A | 3 次 + 指数退避 | 1.1s | 高峰期失败率略升 |\n| B | 5 次 + 指数退避 | 1.6s | 下游压力仍偏高 |\n\n请在评论里回复 A 或 B。确认后我更新本 PR。",
+      wip: "（Draft PR 的描述随进展更新；不额外 @ 任何人）\n\n## 进展\n- [x] 复现超时\n- [x] 定位到重试逻辑\n- [ ] 修复与测试",
+    },
+    mail: {
+      done: "主题：[已修复] 登录偶发超时 — 请验收 PR #1902\n\n张三你好：\n\n结论：问题已修复，等待你验收。\n\n· 原因：重试 5 次且无间隔，高峰期放大下游压力。\n· 改动：重试改为 3 次，加入指数退避。\n· 验证：单测 218 项全部通过；压测 p99 从 2.4s 降到 1.1s。\n\n链接：PR #1902",
+      decide: "主题：[需要决策] 登录超时的重试策略：A 还是 B？\n\n张三你好：\n\n需要你在 A、B 中选一个：\n\nA. 3 次 + 指数退避（p99 1.1s，高峰期失败率略升）\nB. 5 次 + 指数退避（p99 1.6s，下游压力仍偏高）\n\n回复 A 或 B 即可。",
+      wip: null,
+    },
+    bad: "好的，我先看一下这个问题。\n> 正在运行 grep -rn \"retry\" src/ ……找到 4 处匹配\n> 读取 src/auth/login.ts 第 120–188 行\n我认为问题可能出在 retry 逻辑上，但也可能是连接池配置，让我再确认一下。\n> 运行 npm test …… PASS 212 / FAIL 1\n嗯，有一个测试失败了，我看看是不是我改出来的……看起来不是，是之前就有的 flaky test。\n> 运行 node bench/login.js --concurrency 200\n结果 p99 2.4s，比上周的 1.9s 还高一些，可能和今天的流量有关，也可能和昨天合入的缓存改动有关，我先不展开。\n> 运行 git log --oneline -n 20 src/auth/\n我接下来尝试把重试次数改成 3，并加入指数退避，你觉得可以吗？还是保持 5 次？另外要不要顺便把连接池也调大？",
+  };
+  const LBL = { im: "IM 群聊「登录服务」里 Agent 的回复", gh: "GitHub Pull Request 描述 / 评论", mail: "发给张三的邮件" };
+  let ch = "im", sc = "done";
+  function words(s) {
+    const cjk = (s.match(/[一-鿿]/g) || []).length;
+    const lat = (s.replace(/[一-鿿]/g, " ").match(/[A-Za-z0-9@#._\-/]+/g) || []).length;
+    return { cjk, lat, total: Math.round(cjk / 2 + lat) };
+  }
+  function draw2() {
+    const bad = SA.$("#d2-bad").checked;
+    const txt = bad ? T.bad : T[ch][sc];
+    const box = SA.$("#d2-box");
+    SA.$("#d2-where").textContent = LBL[ch] + (bad ? "（反面示例）" : "");
+    box.className = "out-box" + (ch === "im" ? " im" : "") + (txt == null ? " silent" : "");
+    box.textContent = txt == null ? "（不发送。任务还在进行，不需要人决策或验收，保持安静。）" : txt;
+    const w = txt ? words(txt) : { cjk: 0, lat: 0, total: 0 };
+    const qs = txt ? (txt.match(/[？?]/g) || []).length : 0;
+    const needHuman = sc !== "wip";
+    const checks = [];
+    if (ch === "im") {
+      // 反面示例：它在进行中途发消息、还反问用户，不符合“只在决策/验收时发送”
+      checks.push([!bad && (txt == null ? !needHuman : needHuman), "只在需要决策或验收时发送"]);
+      checks.push([txt == null || w.total <= 100, "单次回复不超过 100 词（当前约 " + w.total + " 词）"]);
+      checks.push([txt == null || (qs <= 1 && !bad), "只问直接问题（问号 " + qs + " 个）"]);
+      checks.push([txt == null || !bad, "给简短结论，不输出推理过程和工具日志"]);
+    } else {
+      const structured = txt != null && !bad && (/^##|^主题：/m.test(txt));
+      checks.push([!bad, "不输出推理过程和工具日志"]);
+      checks.push([txt == null || structured, "结构化：有标题/分节，便于异步阅读"]);
+      if (ch === "gh") checks.push([sc !== "done" || (!bad && /问题背景/.test(txt) && /改动说明/.test(txt) && /验证结果/.test(txt)), "PR 交付包含问题背景、改动说明、验证结果"]);
+      else checks.push([txt == null || (!bad && /结论|需要你/.test(txt)), "结构化摘要：开头先给结论或要做的决定"]);
+    }
+    SA.$("#d2-chk").innerHTML = checks.map((c) => '<li class="' + (c[0] ? "ok" : "no") + '">' + SA.esc(c[1]) + "</li>").join("");
+    const pass = checks.filter((c) => c[0]).length;
+    SA.$("#d2-out").textContent = "信道：" + LBL[ch] + "\n情形：" + ({ done: "已修复，待验收", decide: "需要你决策", wip: "仍在进行" })[sc] + (bad ? "（反面示例）" : "") + "\n" +
+      (txt == null ? "输出：不发送" : "输出约 " + w.total + " 词（汉字 " + w.cjk + " 个，英文/数字/代码词 " + w.lat + " 个）") + "\n规范检查：通过 " + pass + " / " + checks.length;
+  }
+  function group(sel, set) {
+    SA.$$(sel + " .btn").forEach((b) => b.addEventListener("click", () => { set(b.dataset.v); SA.$$(sel + " .btn").forEach((x) => x.classList.toggle("on", x === b)); draw2(); }));
+  }
+  group("#d2-ch", (v) => (ch = v)); group("#d2-sc", (v) => (sc = v));
+  SA.$("#d2-bad").addEventListener("change", draw2);
+  draw2();
+});
+</script>
+</body>
+</html>

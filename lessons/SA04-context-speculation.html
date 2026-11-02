@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>上下文组织与提前行动 · SA04</title>
+<link rel="stylesheet" href="assets/sa-lesson.css">
+<script src="assets/glossary-data.js"></script>
+<script src="assets/sa-lib.js"></script>
+<style>
+  .ctx-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13.5px; }
+  .ctx-list li { display: grid; grid-template-columns: 74px minmax(0, 1fr) 64px; gap: 10px; align-items: start; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  .ctx-list li .st { font-size: 11.5px; font-weight: 700; padding: 1px 7px; border-radius: 10px; text-align: center; white-space: nowrap; }
+  .ctx-list li .n { font-family: var(--mono); font-size: 12px; color: var(--ink-3); text-align: right; }
+  .ctx-list li .body small { display: block; color: var(--ink-3); font-size: 12px; }
+  .ctx-list li .body code { font-size: 12px; }
+  .ctx-list li.in { border-color: var(--tip-bd); } .ctx-list li.in .st { background: var(--tip-bg); color: var(--tip-bd); }
+  .ctx-list li.cut { border-color: var(--rule-bd); } .ctx-list li.cut .st { background: var(--rule-bg); color: var(--rule-bd); }
+  .ctx-list li.out { opacity: .55; } .ctx-list li.out .st { background: var(--surface-2); color: var(--ink-3); }
+  .need { color: var(--accent); font-weight: 700; }
+  .bar2 { height: 10px; border-radius: 5px; background: var(--surface-2); overflow: hidden; margin: 4px 0 10px; }
+  .bar2 i { display: block; height: 100%; background: var(--brand-2); transition: width .2s; }
+  .recall { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 14px; }
+  @media (max-width: 900px) { .recall { grid-template-columns: 1fr; } }
+  .recall svg [data-node] { cursor: pointer; }
+  .recall svg [data-node].locked { opacity: .25; cursor: not-allowed; }
+  .recall svg [data-node].open rect { fill: var(--note-bg); stroke: var(--note-bd); stroke-width: 2; }
+  .recall svg [data-node].next rect { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; }
+  .recall .ret { font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-height: 230px; color: var(--ink-2); line-height: 1.65; }
+  .chat { display: grid; gap: 6px; font-size: 14px; margin-bottom: 10px; }
+  .chat .b { padding: 7px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); max-width: 85%; }
+  .chat .b.ag { justify-self: end; background: var(--note-bg); border-color: var(--note-bd); }
+  .chat .b small { display: block; color: var(--ink-3); font-size: 11.5px; }
+  .btn.on { background: var(--brand); color: var(--surface); border-color: var(--brand); }
+</style>
+</head>
+<body>
+<header id="sa-topbar"></header>
+
+<div class="layout">
+<aside class="toc">
+  <h4>本课目录</h4>
+  <ol>
+    <li><a href="#s1">该注入多少上下文</a></li>
+    <li><a href="#s2">Inline 与 Spill</a></li>
+    <li><a href="#s3">三步注入法（动手）</a></li>
+    <li><a href="#s4">链式召回</a></li>
+    <li><a href="#s5">提前行动：投机执行</a></li>
+    <li><a href="#s6">自测与速记</a></li>
+  </ol>
+</aside>
+
+<main>
+<div class="hero">
+  <div class="kicker">SA04 · 核心架构</div>
+  <h1>事件驱动（下）：上下文组织与提前行动</h1>
+  <p>事件过滤、路由之后，它进入了目标会话。接下来有两个问题：往模型的上下文里放多少信息？能不能在人开口之前就把活干了？原文分别用 Cache 和 CPU 投机执行的思路回答。</p>
+  <div class="meta"><span>原文：§3.3 上下文组织 · §3.4 提前行动</span><span>阅读约 18 分钟</span><span>含 3 个互动演示、2 张原文图</span></div>
+</div>
+
+<div class="objectives">
+  <h4>学完本课，你能够：</h4>
+  <ul>
+    <li>解释为什么原文说“浪费上下文窗口，就是浪费模型的智能”。</li>
+    <li>说出 <a class="term" href="glossary.html#inline-spill">Inline &amp; Spill</a> 的含义，并按原文三步决定一条事件该注入什么。</li>
+    <li>用<a class="term" href="glossary.html#chain-of-recall">链式召回</a>演示 Router 如何沿 ID 一跳一跳找回旧任务的上下文。</li>
+    <li>说明<a class="term" href="glossary.html#speculative-execution">投机执行</a>用什么换什么，以及“静默复现并修复”策略为什么默认保持安静。</li>
+  </ul>
+</div>
+
+<!-- ============ 1 ============ -->
+<section class="lesson-sec" id="s1">
+  <h2><span class="num">01</span>该注入多少上下文</h2>
+  <p>先说结论：注入太多和太少都有代价。要找的是中间那个点。</p>
+  <p>在单 Session Agent 里，输入主要是人写的提示词，数量有限。在 Super-agent 里，输入换成了环境持续产生的半结构化事件（<a class="term" href="glossary.html#trigger">Trigger</a>）。所以，工具调用和事件注入的<b>结构设计</b>变得更重要。</p>
+  <div class="vs">
+    <div><h4>注入过多</h4><p class="bad">挤占窗口，稀释模型注意力。</p><p>无关的历史和别的任务的细节，会把真正要看的信息淹没。</p></div>
+    <div><h4>注入过少</h4><p class="bad">模型被迫反复调用工具去读。</p><p>每一次读取都是一次往返，执行步数增加，响应变慢。</p></div>
+  </div>
+  <blockquote class="src">浪费上下文窗口，就是浪费模型的智能。<cite>§3.3</cite></blockquote>
+  <p>原文的解法是：把有限的<a class="term" href="glossary.html#context-window">上下文窗口</a>当作 <a class="term" href="glossary.html#context-as-cache">Cache</a> 来管理。</p>
+</section>
+
+<!-- ============ 2 ============ -->
+<section class="lesson-sec" id="s2">
+  <h2><span class="num">02</span>Inline 与 Spill</h2>
+  <p>原文借用编译优化和计算机系统的概念，把上下文注入归纳为两个基本操作。</p>
+  <div class="grid-2">
+    <div class="kp"><div class="k">操作一</div><div class="v">Inline（内联）</div><p>把近期很可能用到的信息，直接放进当前上下文窗口。好处：省去一次额外的工具调用往返。</p></div>
+    <div class="kp"><div class="k">操作二</div><div class="v">Spill（溢出）</div><p>超出窗口预算或低频使用的完整信息，留在窗口之外。窗口里只保留引用或摘要，模型需要时再按需读取。</p></div>
+  </div>
+  <p>决定“近期很可能用到什么”的依据，是经典的<a class="term" href="glossary.html#locality">局部性</a>（Locality）思想：和当前对象紧密关联的、时间或空间上相邻的信息，最可能马上被用到。</p>
+  <div class="callout note"><span class="ttl">补充：这几个词从哪来</span>
+    <b>Cache 与局部性</b>：CPU 缓存只存一小部分数据，却能命中大部分访问，靠的就是“刚用过的和挨着的，接下来还会用”。<br>
+    <b>Inline</b>：编译器把一个小函数的函数体直接抄进调用处，省掉一次函数调用的开销。对应这里“省掉一次工具调用往返”。<br>
+    <b>Spill</b>：寄存器不够用时，编译器把变量“溢出”到内存，只在需要时再读回来。对应这里“完整内容留在窗口外，保留续读入口”。<br>
+    这些类比是课程作者的解释；原文只说“借用编译优化与计算机系统中的概念”。</div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="lesson-sec" id="s3">
+  <h2><span class="num">03</span>三步注入法（动手）</h2>
+  <p>原文给出了用 Inline &amp; Spill 逐步优化事件注入的三步。</p>
+  <ol class="steps">
+    <li><b>从最少信息开始：</b>最初只提供当前对象的 ID 和内容摘要。</li>
+    <li><b>利用局部性逐步 Inline 关联信息：</b>先附上紧密关联对象的 ID，再附带时空相邻的内容。例如：内容前 50 字、IM 消息的前后相邻消息与所回复的消息，或代码评论所在评审讨论中的相邻评论。</li>
+    <li><b>超出上限则 Spill：</b>对无法全部 Inline 的长内容设定较小的长度上限，把超出部分 Spill 到窗口外。一种简单直接的做法是：截断超出部分，并保留续读入口。模型需要完整内容时，再调用工具读取。</li>
+  </ol>
+  <p>下面的演示里，群聊中有人发来一条新消息，系统要把它注入一个 Worker 的上下文。拖动“上下文预算”，看三步法如何决定哪些信息进窗口。</p>
+
+  <div class="chart-card" id="demo1">
+    <div class="chart-head">
+      <div class="chart-title">演示：一条 IM 消息该注入什么？</div>
+      <label class="ctrl">上下文预算 = <b id="d1-bv">200</b> 字 <input id="d1-b" type="range" min="20" max="2400" step="10" value="200"></label>
+    </div>
+    <div class="demo">
+      <div class="chat">
+        <div class="b"><small>Trigger #42 · 群聊「登录服务」· 张三 · 回复 #39</small>@agent 上次那个登录超时的修复，顺便把重试次数改成 3 吧，日志里我看还是会偶发失败……（后面还贴了 380 字的报错日志）</div>
+      </div>
+      <div class="data-note" style="margin-bottom:6px">候选信息按原文三步的优先级排列。<span class="need">★</span> 表示完成这条请求真正需要的信息。</div>
+      <ul class="ctx-list" id="d1-list"></ul>
+    </div>
+    <div class="chart-body" style="padding:0 16px">
+      <div class="data-note">注入字数（占预算）</div><div class="bar2"><i id="d1-bar"></i></div>
+      <div class="readout" id="d1-out"></div>
+    </div>
+    <div class="chart-foot">从 20 字往上拖。预算太小时，只有 ID 和摘要进窗口，<b>需要的信息都要靠工具去读</b>，额外调用多。预算适中时，紧密关联的信息被内联，长内容被截断并留下续读入口，调用数降到很低。预算拉满时，连整段 Thread 历史都塞了进来：调用数不再减少，<b>无关字数却猛增</b>，这就是“稀释注意力”。<br><span class="data-note">简化模型：按优先级贪心放入；可截断的长内容最多截到 50 字（Spill），其余放不下就只留引用。每缺一条 ★ 信息、或 ★ 信息被截断，记 1 次额外工具调用。字数是示意值，不是原文数据。</span></div>
+  </div>
+
+  <div class="callout tip"><span class="ttl">看演示要点</span>三步法的顺序本身就是一种 Cache 替换策略：越可能用到的越先放；放不下的长内容不是丢掉，而是“截断 + 留续读入口”。模型从不会因为信息被 Spill 而失去它，只是要多付一次读取。</div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section class="lesson-sec" id="s4">
+  <h2><span class="num">04</span>链式召回</h2>
+  <p>系统长期运行后，会积累大量历史任务。而且，大量后续事件已经通过<a class="term" href="glossary.html#subscription">订阅与直通</a>直接发给 Worker，不经过 Router。这给 <a class="term" href="glossary.html#router">Router 层</a>带来一个两难：</p>
+  <ul>
+    <li>它<b>不能</b>把所有任务的全量历史都放进自己的上下文窗口；</li>
+    <li>它<b>又需要</b>在用户跨信道提起某个旧任务时，找回当时的上下文。</li>
+  </ul>
+  <p>原文的回答是：把 Inline &amp; Spill <b>一致地</b>应用到系统中的各类对象上。这样就自然得到一种按需展开的多跳检索机制——<a class="term" href="glossary.html#chain-of-recall">链式召回</a>（Chain of Recall）。</p>
+  <div class="callout rule"><span class="ttl">机制</span>系统为 Trigger、Thread 和 Worker Session 等对象赋予唯一 ID，并在注入时内联紧密关联对象的 ID，使这些对象在底层构成一张引用图。每次召回的对象本身也遵循 Inline &amp; Spill，返回结果中又内联下一跳关联对象的摘要与 ID。</div>
+  <figure class="fig"><img src="img/fig08.jpg" alt="链式召回示意：Trigger #42 内联 thread_id #08 与 worker_id #03，逐跳读取 Thread #08、Worker #03、Thread #15"><figcaption><b>原文图 8</b>链式召回：每次召回的对象均内联下一跳关联对象的 ID，支持沿引用关系逐跳展开上下文。</figcaption></figure>
+  <p>原文的例子：从一条当前消息读取所在 Thread，再从 Thread 内联的 ID 追踪到相关的 Worker Session，进而找到该 Worker 关联的另一个代码评审 Thread。下面的演示把这个过程做成可以点的。</p>
+
+  <div class="chart-card" id="demo2">
+    <div class="chart-head">
+      <div class="chart-title">演示：用户在 IM 里问起一个旧任务</div>
+      <button class="btn" id="d2-reset" type="button">重来</button>
+      <button class="btn" id="d2-auto" type="button">自动走一遍</button>
+    </div>
+    <div class="demo">
+      <div class="chat">
+        <div class="b"><small>Trigger #57 · 群聊「数据导出」· 李四</small>之前那个导出 CSV 中文乱码的问题，PR 合了没？</div>
+      </div>
+      <div class="recall">
+        <svg viewBox="0 0 470 300" role="img" aria-label="引用图">
+          <defs><marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="currentColor"/></marker></defs>
+          <g style="color: var(--ink-3)">
+            <path class="edge dash" data-e="t57-th12" d="M120 50 H165" marker-end="url(#ar4)"/>
+            <path class="edge dash" data-e="th12-w05" d="M240 75 V120" marker-end="url(#ar4)"/>
+            <path class="edge dash" data-e="th12-t19" d="M315 50 H350" marker-end="url(#ar4)"/>
+            <path class="edge dash" data-e="w05-th31" d="M240 175 V220" marker-end="url(#ar4)"/>
+            <path class="edge dash" data-e="th31-t90" d="M315 250 H350" marker-end="url(#ar4)"/>
+          </g>
+          <g data-node="t57"><rect class="box" x="10" y="25" width="110" height="50" rx="8"/><text x="65" y="47" text-anchor="middle">Trigger #57</text><text class="sm" x="65" y="64" text-anchor="middle">当前消息</text></g>
+          <g data-node="th12"><rect class="box" x="165" y="25" width="150" height="50" rx="8"/><text x="240" y="47" text-anchor="middle">Thread #12</text><text class="sm" x="240" y="64" text-anchor="middle">IM 话题「数据导出」</text></g>
+          <g data-node="t19"><rect class="box" x="350" y="25" width="110" height="50" rx="8"/><text x="405" y="47" text-anchor="middle">Trigger #19</text><text class="sm" x="405" y="64" text-anchor="middle">最初的报错</text></g>
+          <g data-node="w05"><rect class="box" x="165" y="125" width="150" height="50" rx="8"/><text x="240" y="147" text-anchor="middle">Worker #05</text><text class="sm" x="240" y="164" text-anchor="middle">任务状态摘要</text></g>
+          <g data-node="th31"><rect class="box" x="165" y="225" width="150" height="50" rx="8"/><text x="240" y="247" text-anchor="middle">Thread #31</text><text class="sm" x="240" y="264" text-anchor="middle">GitHub PR #2210 评审</text></g>
+          <g data-node="t90"><rect class="box" x="350" y="225" width="110" height="50" rx="8"/><text x="405" y="247" text-anchor="middle">Trigger #90</text><text class="sm" x="405" y="264" text-anchor="middle">最新评审事件</text></g>
+        </svg>
+        <div class="ret" id="d2-ret"></div>
+      </div>
+    </div>
+    <div class="chart-body" style="padding:0 16px"><div class="readout" id="d2-out"></div></div>
+    <div class="chart-foot" id="d2-foot">点亮的方框是“已读到”的对象，虚线框是“当前上下文里已有它的 ID、可以读”的下一跳。灰掉的方框，Router 现在还不知道它存在。顺着 ID 点下去，看 Router 用几跳就能回答问题。<br><span class="data-note">示例对象和内容是虚构的，结构依照原文图 8 与 §3.3 的描述。</span></div>
+  </div>
+  <div class="callout tip"><span class="ttl">链式召回的关键</span>没有一个“中心索引”。线索就分散在每个对象里：每个对象都内联了邻居的 ID 和摘要。模型拿着当前事件，像顺藤摸瓜一样往外走，需要几跳就走几跳。原文说，这缓解了 Router 层在长程运行中丢失先前信息的问题。</div>
+  <div class="callout warn"><span class="ttl">局限</span>链式召回主要解决<b>近期</b>任务与会话历史的按需检索。原文在 §8.1 承认：运行周期拉长到跨月甚至更长时，长程记忆会成为可扩展性的主要瓶颈。见 <a href="SA09-open-problems.html">SA09</a>。</div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section class="lesson-sec" id="s5">
+  <h2><span class="num">05</span>提前行动：投机执行</h2>
+  <p>前面几节讲的是“事件来了怎么处理”。这一节讲：能不能在人还没下指令时，就先动手？</p>
+  <div class="callout rule"><span class="ttl">原文思路</span>借鉴计算机系统中的投机执行（Speculative Execution）思想：Agent 可以在还不确定结果是否会被采用时，根据环境信号在后台提前尝试，通过消耗额外的后台算力来减少人类的等待与介入成本。结果有价值就交付，没有价值就丢弃。</div>
+  <p>原文给了两个场景：</p>
+  <div class="grid-2">
+    <div class="kp"><div class="k">个人助手场景</div><div class="v">会议邀约</div><p>收到会议邀约邮件或待办消息时，Agent 先在后台核对日程冲突、搜集相关背景资料、备好回复草稿。用户过目后直接确认发出。</p></div>
+    <div class="kp"><div class="k">研发协作场景</div><div class="v">静默复现并修复</div><p>原文在 DeepSeek Harness 内部用户群里配置了这条策略：群里有人反馈问题或讨论改动方案时，Agent 先在后台尝试复现、寻找修复方案。<b>只有确认问题并找到简单修复方案后</b>，才把结果交付给用户；否则全程保持安静。</p></div>
+  </div>
+  <figure class="fig"><img src="img/fig09.jpg" alt="群里讨论波浪号被渲染成删除线时，Super-agent 已提交修复 Pull Request"><figcaption><b>原文图 9</b>投机执行示例：用户报告波浪号被渲染成删除线。群内还在讨论“该在训练中解决，还是改渲染规则”时，Super-agent 已在后台提交了修复 Pull Request，并能回答修改依据。</figcaption></figure>
+
+  <div class="chart-card" id="demo3">
+    <div class="chart-head">
+      <div class="chart-title">演示：投机执行用什么换什么</div>
+      <div class="btn-group" id="d3-case">
+        <button class="btn on" type="button" data-c="ok">能复现，有简单修复</button>
+        <button class="btn" type="button" data-c="norepro">复现不了</button>
+        <button class="btn" type="button" data-c="design">需要设计决策</button>
+      </div>
+      <label class="ctrl"><input id="d3-spec" type="checkbox" checked> 开启投机执行</label>
+    </div>
+    <div class="demo" id="d3-lanes"></div>
+    <div class="chart-body" style="padding:0 16px"><div class="readout" id="d3-out"></div></div>
+    <div class="chart-foot" id="d3-foot">关掉“投机执行”，对比同一件事的时间线。开启时，Agent 用后台算力去“赌”一次；赌中了，人等待的时间大幅缩短；赌不中，结果被丢弃，群里一条消息都不多。<br><span class="data-note">简化模型：时间单位是分钟，数值是示意。关闭投机执行时，假设讨论结束后有人 @agent，Agent 再开始同样的工作。</span></div>
+  </div>
+  <div class="callout note"><span class="ttl">补充：CPU 里的投机执行</span>CPU 遇到条件分支时，不等条件算出来，就先猜一个方向往下执行。猜对了，结果直接用，省下等待；猜错了，把算出来的结果全部丢弃，从正确的分支重来。代价是做了一些“白干”的计算。Super-agent 的版本完全同构：用后台算力换人的等待，猜错就丢弃，<b>不能让错误的结果“泄露”出去</b>——对应到这里，就是不发出无用的消息。</div>
+  <div class="callout warn"><span class="ttl">常见误解</span>投机执行不是“想到什么就往群里发什么”。“静默复现并修复”的精髓在于<b>交付门槛</b>：确认问题、修复简单，两条都满足才说话。它和 <a href="SA01-why-super-agent.html#s5">SA01</a> 讲的“主动 = 做值得做的事 + 没事保持安静”是一回事。这条策略本身是写在语义层里的（见 <a href="SA03-event-filter-route.html">SA03</a> 的两级过滤）。</div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section class="lesson-sec" id="s6">
+  <h2><span class="num">06</span>自测与速记</h2>
+  <div class="quiz" data-answer="1">
+    <div class="q">原文对“Spill”的一种简单直接的做法是？</div>
+    <div class="opts"><button>把超出预算的内容直接删除</button><button>截断超出部分，并保留续读入口，模型需要完整内容时再调用工具读取</button><button>把超出部分交给另一个 Worker 处理</button><button>压缩成向量存入数据库</button></div>
+    <div class="explain">原文 §3.3 第 3 步：对无法全部 Inline 的长内容设定较小的长度上限，截断超出部分并保留续读入口。</div>
+  </div>
+  <div class="quiz" data-answer="2">
+    <div class="q">按原文的三步法，下面哪一项最适合在第 2 步“利用局部性逐步 Inline”时加入？</div>
+    <div class="opts"><button>整个代码仓库的目录树</button><button>团队过去一个月的全部群聊记录</button><button>这条 IM 消息所回复的消息，以及它的前后相邻消息</button><button>其他无关任务的执行日志</button></div>
+    <div class="explain">原文举例：内容前 50 字、IM 消息的前后相邻消息与所回复的消息、代码评论所在评审讨论中的相邻评论。它们在时间或空间上相邻，最可能马上用到。</div>
+  </div>
+  <div class="quiz" data-answer="0">
+    <div class="q">链式召回能够“一跳一跳”展开，关键原因是？</div>
+    <div class="opts"><button>每次召回返回的对象本身也遵循 Inline &amp; Spill，内联了下一跳对象的摘要与 ID</button><button>Router 把全部历史都放在自己的上下文里</button><button>系统维护了一个中心化的全文搜索索引</button><button>Worker 之间直接通信交换上下文</button></div>
+    <div class="explain">对象靠唯一 ID 构成引用图；每个召回结果都内联下一跳的 ID 与摘要，模型就能顺着引用关系按需展开。</div>
+  </div>
+  <div class="quiz" data-answer="3">
+    <div class="q">在“静默复现并修复”策略下，Agent 后台复现了问题，但发现修复需要团队做设计取舍。按原文的描述，它应该？</div>
+    <div class="opts"><button>立即提交一个大改动的 PR</button><button>在群里发长文分析所有方案</button><button>每隔一段时间汇报进展</button><button>不满足“确认问题并找到简单修复”的交付条件，因此不主动交付这次投机的结果</button></div>
+    <div class="explain">原文：只有在确认问题并找到简单的修复方案后，才会把结果交付给用户，否则全程保持安静。投机执行的结果“没有价值就丢弃”。</div>
+  </div>
+
+  <h3>速记表</h3>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>要点</th><th>一句话</th></tr>
+    <tr><td>核心矛盾</td><td>注入过多稀释注意力，注入过少反复调工具；浪费窗口 = 浪费智能</td></tr>
+    <tr><td>视角</td><td>把上下文窗口当 Cache 管理</td></tr>
+    <tr><td>Inline</td><td>近期可能用到的信息直接放进窗口，省一次往返</td></tr>
+    <tr><td>Spill</td><td>超预算或低频的完整信息留在窗口外，只留引用/摘要；截断 + 续读入口</td></tr>
+    <tr><td>三步法</td><td>最少信息（ID + 摘要）→ 按局部性 Inline（关联 ID、前 50 字、相邻/所回复消息）→ 超限 Spill</td></tr>
+    <tr><td>链式召回</td><td>对象有唯一 ID，内联邻居 ID，构成引用图；按需多跳展开；解决近期历史检索</td></tr>
+    <tr><td>投机执行</td><td>用后台算力换人的等待；有价值就交付，没价值就丢弃</td></tr>
+    <tr><td>静默复现并修复</td><td>后台复现 + 找修复；确认问题且修复简单才发声，否则全程安静</td></tr>
+  </table></div>
+
+  <h3>相关课程</h3>
+  <div class="related">
+    <a href="SA03-event-filter-route.html"><small>上一课 · SA03</small>事件驱动（上）：过滤与路由</a>
+    <a href="SA05-human-interaction.html"><small>下一课 · SA05</small>面向人的交互：全双工与多信道</a>
+    <a href="SA09-open-problems.html"><small>SA09</small>开放问题：长程记忆与安全</a>
+  </div>
+</section>
+
+<nav id="sa-pager" data-current="SA04-context-speculation.html"></nav>
+<p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§3.3–3.4（2026-10-31）。标为“补充”的内容和模拟演示是课程作者的解释，不是原文观点；演示里的消息、ID 和数字都是虚构的示意。</p>
+</main>
+</div>
+
+<script>
+SA.onReady(function () {
+  /* ---- 1. Inline & Spill 游乐场 ---- */
+  // step: 原文三步；len: 完整字数；cut: 可截断（Spill 到 50 字 + 续读入口）；need: 完成请求需要
+  const ITEMS = [
+    { step: 1, name: "当前消息 ID 与摘要", txt: "<code>trigger_id: #42</code> · “张三请求修改登录重试次数”", len: 20, need: true },
+    { step: 2, name: "紧密关联对象的 ID", txt: "<code>thread_id: #08</code> <code>reply_to: #39</code> <code>worker_id: #03</code>", len: 18, need: true },
+    { step: 2, name: "当前消息全文", txt: "含 380 字报错日志", len: 430, cut: true, need: true },
+    { step: 2, name: "所回复的消息 #39", txt: "“登录超时修复已合入，重试次数暂定 5 次……”", len: 120, cut: true, need: true },
+    { step: 2, name: "前后相邻消息（各 1 条）", txt: "前：“今天发版吗？” 后：“+1 我也遇到过”", len: 60, need: false },
+    { step: 2, name: "Worker #03 状态摘要", txt: "“修复登录超时：PR #1876 已合入；订阅 Thread #08、#15”", len: 70, need: true },
+    { step: 3, name: "Thread #08 完整历史", txt: "该话题过去两周的 86 条消息", len: 1600, cut: true, need: false },
+  ];
+  const CAP = 50;
+  function plan(budget) {
+    let used = 0;
+    return ITEMS.map((it) => {
+      const room = budget - used;
+      if (it.len <= room) { used += it.len; return { it, st: "in", n: it.len }; }
+      if (it.cut && room >= CAP) { used += CAP; return { it, st: "cut", n: CAP }; }
+      if (room >= 8) { used += 8; return { it, st: "out", n: 8 }; }    // 只留一个引用
+      return { it, st: "out", n: 0 };
+    });
+  }
+  function calls(p) { return p.filter((x) => x.it.need && x.st !== "in").length; }
+  function draw1() {
+    const b = +SA.$("#d1-b").value; SA.$("#d1-bv").textContent = b;
+    const p = plan(b);
+    const LBL = { in: "Inline", cut: "Spill 截断", out: "只留引用" };
+    SA.$("#d1-list").innerHTML = p.map((x) => '<li class="' + x.st + '"><span class="st">' + LBL[x.st] + '</span><span class="body">' + (x.it.need ? '<span class="need">★ </span>' : "") + "<b>" + x.it.name + "</b>（第 " + x.it.step + " 步）<small>" + x.it.txt +
+      (x.st === "cut" ? " → 截到前 " + CAP + " 字 + <code>read(…)</code> 续读入口" : x.st === "out" ? (x.n ? " → 只保留 ID，需要时调用工具读取" : " → 预算用尽，未注入") : "") + '</small></span><span class="n">' + x.n + " / " + x.it.len + "</span></li>").join("");
+    const used = p.reduce((s, x) => s + x.n, 0), waste = p.filter((x) => !x.it.need).reduce((s, x) => s + x.n, 0), c = calls(p);
+    SA.$("#d1-bar").style.width = Math.min(100, (100 * used) / Math.max(b, 1)) + "%";
+    // 扫一遍预算，找出“调用数最少时的最小预算”
+    let best = null; for (let k = 20; k <= 2400; k += 10) { const q = plan(k); if (best == null || calls(q) < calls(plan(best))) best = k; }
+    SA.$("#d1-out").textContent =
+      "预算 " + b + " 字：注入 " + used + " 字，其中与本请求无关 " + waste + " 字（" + SA.fmt((100 * waste) / Math.max(1, used), 0) + "%）\n" +
+      "预计额外工具调用 " + c + " 次（缺失或被截断的 ★ 信息）\n" +
+      "在这个模型里，预算约 " + best + " 字时调用数已降到最低（" + calls(plan(best)) + " 次）；再加预算，只会增加无关字数。";
+  }
+  SA.$("#d1-b").addEventListener("input", draw1); draw1();
+
+  /* ---- 2. 链式召回 ---- */
+  const NODES = {
+    t57: { parent: null, edge: null, size: 60, ret:
+      "read_trigger(#57) →\n{ id: #57, from: 李四, text: \"之前那个导出 CSV 中文乱码的问题，PR 合了没？\",\n  thread_id: #12,        ← 内联：所在 Thread 的 ID\n  reply_to: null, prev: \"(相邻消息前 50 字)…\" }" },
+    th12: { parent: "t57", edge: "t57-th12", size: 140, ret:
+      "read_thread(#12) →\n{ id: #12, channel: IM 群聊「数据导出」,\n  recent_summary: \"3 周前报告导出 CSV 中文乱码；Agent 已接手修复…\"   ← 更早历史已 Spill\n  trigger_ids: [#19, #23, #57],   ← 内联\n  worker_ids: [#05] }             ← 内联：处理过它的 Worker" },
+    t19: { parent: "th12", edge: "th12-t19", size: 90, ret:
+      "read_trigger(#19) →\n{ id: #19, from: 王五, text: \"导出的 CSV 用 Excel 打开中文全是乱码…\"(前 50 字)\n  …（剩余 300 字已 Spill，可 read_trigger(#19, offset=50) 续读） }\n\n这一跳对回答“合了没”帮助不大。链式召回是按需展开：不需要的分支就不走。" },
+    w05: { parent: "th12", edge: "th12-w05", size: 110, ret:
+      "read_worker(#05) →\n{ id: #05, task: \"修复导出 CSV 中文乱码（加 UTF-8 BOM）\",\n  status: \"已提交 PR，等待评审\",\n  thread_ids: [#12, #31] }   ← 内联：它还订阅了另一个 Thread" },
+    th31: { parent: "w05", edge: "w05-th31", size: 130, ret:
+      "read_thread(#31) →\n{ id: #31, channel: GitHub PR #2210 评审,\n  recent_summary: \"2 位评审 approve；CI 通过；昨天 18:20 已 merge\",\n  trigger_ids: [#88, #90], worker_ids: [#05] }" },
+    t90: { parent: "th31", edge: "th31-t90", size: 70, ret:
+      "read_trigger(#90) →\n{ id: #90, type: pull_request.closed, merged: true, by: 赵六, at: 昨天 18:20 }" },
+  };
+  const ANSWER = ["th31"]; // 读到 Thread #31 就能回答
+  let opened = new Set(["t57"]);
+  function draw2(last) {
+    for (const [id, n] of Object.entries(NODES)) {
+      const g = SA.$('#demo2 [data-node="' + id + '"]');
+      const isOpen = opened.has(id), avail = !isOpen && n.parent && opened.has(n.parent);
+      g.classList.toggle("open", isOpen); g.classList.toggle("next", !!avail); g.classList.toggle("locked", !isOpen && !avail);
+      if (n.edge) { const e = SA.$('#demo2 [data-e="' + n.edge + '"]'); e.classList.toggle("hl", isOpen); e.classList.toggle("dash", !isOpen); }
+    }
+    const lid = last || "t57";
+    SA.$("#d2-ret").textContent = NODES[lid].ret;
+    const hops = opened.size - 1, chars = [...opened].reduce((s, id) => s + NODES[id].size, 0);
+    const done = ANSWER.every((a) => opened.has(a));
+    SA.$("#d2-out").textContent =
+      "已展开 " + hops + " 跳，读入约 " + chars + " 字（示意）。路径：" + [...opened].map((x) => "#" + x.replace(/\D/g, "")).join(" → ") + "\n" +
+      (done ? "✓ 已能回答：PR #2210 昨天 18:20 已 merge。Router 只读了需要的几个对象，没有加载整段历史。" : "还不能回答。点虚线框，沿着已知 ID 继续读。");
+  }
+  SA.$$("#demo2 [data-node]").forEach((g) => g.addEventListener("click", () => {
+    const id = g.dataset.node, n = NODES[id];
+    if (opened.has(id)) return draw2(id);
+    if (n.parent && opened.has(n.parent)) { opened.add(id); draw2(id); }
+  }));
+  SA.$("#d2-reset").addEventListener("click", () => { opened = new Set(["t57"]); draw2(); });
+  SA.$("#d2-auto").addEventListener("click", () => {
+    opened = new Set(["t57"]); draw2();
+    ["th12", "w05", "th31"].forEach((id, k) => setTimeout(() => { opened.add(id); draw2(id); }, 700 * (k + 1)));
+  });
+  draw2();
+
+  /* ---- 3. 投机执行 ---- */
+  // 时间（分钟）：0 有人报问题；群里讨论到 discEnd；关闭投机时，讨论结束后才 @agent
+  const CASES = {
+    ok: { name: "能复现，有简单修复", repro: 6, fix: 9, deliver: true, discEnd: 25 },
+    norepro: { name: "复现不了", repro: 12, fix: 0, deliver: false, discEnd: 25 },
+    design: { name: "需要设计决策", repro: 6, fix: 10, deliver: false, discEnd: 25 },
+  };
+  let cur = "ok";
+  function draw3() {
+    const c = CASES[cur], spec = SA.$("#d3-spec").checked;
+    const work = c.repro + c.fix;
+    const lanes = [{ name: "群聊讨论", segs: [{ t0: 0, t1: 1, cls: "c5", text: "报问题" }, { t0: 1, t1: c.discEnd, cls: "c6", text: "讨论：改训练？转义？改渲染？" }] }];
+    let wait, compute, msgs, deliverAt = null;
+    if (spec) {
+      const segs = [{ t0: 1, t1: 1 + c.repro, cls: "c1", text: "后台复现" }];
+      if (c.fix) segs.push({ t0: 1 + c.repro, t1: 1 + work, cls: "c3", text: "找修复" });
+      if (c.deliver) { deliverAt = 1 + work; segs.push({ t0: deliverAt, t1: deliverAt + 1.2, cls: "c2", text: "交付 PR" }); }
+      else segs.push({ t0: 1 + work, t1: 1 + work + 1.2, cls: "c6", text: "丢弃" });
+      lanes.push({ name: "Agent（后台）", segs });
+      compute = work; msgs = c.deliver ? 1 : 0;
+      wait = c.deliver ? deliverAt : null;
+    } else {
+      const start = c.discEnd + 2; // 讨论后才有人 @agent
+      lanes[0].segs.push({ t0: c.discEnd, t1: start, cls: "c5", text: "@agent" });
+      const segs = [{ t0: start, t1: start + c.repro, cls: "c1", text: "复现" }];
+      if (c.fix) segs.push({ t0: start + c.repro, t1: start + work, cls: "c3", text: "找修复" });
+      segs.push({ t0: start + work, t1: start + work + 1.2, cls: "c2", text: c.deliver ? "交付 PR" : "汇报" });
+      lanes.push({ name: "Agent（被叫后）", segs });
+      compute = work; msgs = 2; wait = start + work;
+    }
+    SA.lanes("#d3-lanes", lanes, { t1: 50, unit: " 分" });
+    let note;
+    if (spec && c.deliver) note = "讨论还没结束（第 " + c.discEnd + " 分钟），修复已在第 " + SA.fmt(deliverAt, 0) + " 分钟交付。人只需要审一个 PR。";
+    else if (spec) note = "后台花了 " + compute + " 分钟算力，没有达到交付条件，结果被丢弃。群里一条消息都没多，人没有被打扰。";
+    else note = "人要先讨论、再 @agent、再等它干完：从报问题到拿到结果用了 " + SA.fmt(wait, 0) + " 分钟，并且至少要发出和读 " + msgs + " 条消息。";
+    SA.$("#d3-out").textContent =
+      "情形：" + c.name + " · 投机执行：" + (spec ? "开" : "关") + "\n" +
+      "后台算力消耗：" + compute + " Agent·分钟\n" +
+      "人等到结果：" + (wait == null ? "—（没有结果需要人看）" : SA.fmt(wait, 0) + " 分钟") + "；Agent 发出的消息：" + msgs + " 条\n" + note;
+  }
+  SA.$$("#d3-case .btn").forEach((b) => b.addEventListener("click", () => { cur = b.dataset.c; SA.$$("#d3-case .btn").forEach((x) => x.classList.toggle("on", x === b)); draw3(); }));
+  SA.$("#d3-spec").addEventListener("change", draw3);
+  draw3();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>为什么需要 Super-agent · SA01</title>
+<link rel="stylesheet" href="assets/sa-lesson.css">
+<script src="assets/glossary-data.js"></script>
+<script src="assets/sa-lib.js"></script>
+<style>
+  .arch [data-mod] { cursor: pointer; transition: opacity .2s; }
+  .arch .tag { font-family: var(--mono); font-size: 11px; fill: var(--accent); font-weight: 700; }
+  .map-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; align-items: center; font-size: 13.5px; color: var(--ink-3); }
+  .btn.on { background: var(--brand); color: var(--surface); border-color: var(--brand); }
+</style>
+</head>
+<body>
+<header id="sa-topbar"></header>
+
+<div class="layout">
+<aside class="toc">
+  <h4>本课目录</h4>
+  <ol>
+    <li><a href="#s1">人的角色在上移</a></li>
+    <li><a href="#s2">瓶颈转向人的注意力</a></li>
+    <li><a href="#s3">简单扩展为什么不够</a></li>
+    <li><a href="#s4">什么是 Super-agent</a></li>
+    <li><a href="#s5">四个基础特征</a></li>
+    <li><a href="#s6">五个模块：全景图</a></li>
+    <li><a href="#s7">自测与速记</a></li>
+  </ol>
+</aside>
+
+<main>
+<div class="hero">
+  <div class="kicker">SA01 · 问题与全景</div>
+  <h1>为什么需要 Super-agent</h1>
+  <p>模型越来越能独立完成单个任务。新的瓶颈不在模型，而在人能同时盯住几件事。Super-agent 要做的，是让人从“管理一堆会话”里解放出来。</p>
+  <div class="meta"><span>原文：§1 Super-agent</span><span>阅读约 15 分钟</span><span>含 2 个互动演示、3 张原文图</span></div>
+</div>
+
+<div class="objectives">
+  <h4>学完本课，你能够：</h4>
+  <ul>
+    <li>解释“单任务上限看模型，多任务上限看注意力”这句话，并用模拟说明它。</li>
+    <li>说出现有单 <a class="term" href="glossary.html#session">Session</a> Agent 在多任务、团队协作下的三个限制。</li>
+    <li>说出 <a class="term" href="glossary.html#super-agent">Super-agent</a> 的定义和<a class="term" href="glossary.html#four-traits">四个基础特征</a>。</li>
+    <li>把四个特征对应到五个架构模块，并知道它们分别在哪一课展开。</li>
+  </ul>
+</div>
+
+<!-- ============ 1 ============ -->
+<section class="lesson-sec" id="s1">
+  <h2><span class="num">01</span>人的角色在上移</h2>
+  <p>先说结论：人正在从“盯着执行”转向“做决策、做验收”。原文用两个变化说明这一点。</p>
+  <div class="grid-2">
+    <div class="kp"><div class="k">变化一 · 单任务</div><div class="v">越来越少需要人盯</div><p>以 Coding Agent 为代表的单任务 <a class="term" href="glossary.html#agent">Agent</a> 已经证明：模型能用工具解决复杂问题。它需要的持续监控和逐步干预越来越少。</p></div>
+    <div class="kp"><div class="k">变化二 · 多任务</div><div class="v">多 Agent 协同变得可行</div><p>模型的多 Agent 协同能力也在提升。跨会话的组织与调度因此变得可行。</p></div>
+  </div>
+  <p>能力的提升催生了新的应用形态。近期，<a class="term" href="glossary.html#personal-agent">个人助手</a>（Personal Agent）集中涌现。它们直接接入消息、日程、邮件和工作平台，持续观察信息流，协助处理事务。</p>
+  <p>原文强调：这种<b>持续在线、事件驱动</b>的工作模式不只属于个人场景。在软件开发等团队场景里，它同样有价值。</p>
+  <blockquote class="src">随着人类在底层执行中的参与减少，人的角色正逐步上移到更高层的决策与验收。<cite>§1</cite></blockquote>
+</section>
+
+<!-- ============ 2 ============ -->
+<section class="lesson-sec" id="s2">
+  <h2><span class="num">02</span>瓶颈转向人的注意力</h2>
+  <p>现有主流 Agent 以单一 Session 为基本工作单位。不同 Session 彼此独立。你同时推进多项工作时，必须手动切换会话，并记住每个会话里聊过什么。</p>
+  <p>原文给了一个观察数字：<b>一个人通常只能同时跟进 3 到 5 个活跃 Session。</b></p>
+  <div class="callout rule"><span class="ttl">本课核心句</span>在这种设计下，单任务的上限取决于模型能力，多任务的上限取决于人的注意力。</div>
+  <p>下面的模拟把这句话变成可以动手验证的模型。每个 Session 里，Agent 先独立干一段活，然后停下来等你：你要读它的进展、回一句话。从一个 Session 切到另一个 Session，你还要花时间“找回状态”。你只有一个人，一次只能处理一个 Session。</p>
+
+  <div class="chart-card" id="demo1">
+    <div class="chart-head">
+      <div class="chart-title">模拟：同时开几个 Session，才算“开满”？</div>
+      <label class="ctrl">并行 Session 数 = <b id="d1-nv">4</b> <input id="d1-n" type="range" min="1" max="10" value="4"></label>
+      <label class="ctrl">Agent 每次独立工作 = <b id="d1-av">8</b> 分钟 <input id="d1-a" type="range" min="2" max="30" value="8"></label>
+      <label class="ctrl">切换代价 = <b id="d1-sv">1.0</b> 分钟 <input id="d1-s" type="range" min="0" max="3" step="0.5" value="1"></label>
+    </div>
+    <div class="legend"><span><i style="background:#3d7be8"></i>Agent 在干活</span><span><i style="background:#d64541"></i>Agent 停着等你</span><span><i style="background:#e8a33d"></i>你在处理这个 Session</span></div>
+    <div class="demo" id="d1-lanes"></div>
+    <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
+    <div class="chart-foot" id="d1-foot">把 Session 数从 1 往上拖。前几档，总产出几乎按比例增长。到了某个点，<b>你</b>的时间被占满（利用率接近 100%），再加 Session，只会让更多 Agent 停着等你。再把“Agent 每次独立工作”调长（模型更强），你会发现这个上限跟着变大。<br><span class="data-note">简化模型：模拟 2 小时；每次处理 1.5 分钟；Agent 工作时长在设定值的 50%–150% 之间随机；你按先来先服务处理。图中只画前 60 分钟。数字只用来说明机制，不是原文实验。</span></div>
+  </div>
+
+  <div class="callout note"><span class="ttl">补充：为什么是 3–5 个</span>在默认参数下，每个 Session 每轮占用你约 2.5 分钟（处理 1.5 + 切换 1），每轮约 10 分钟。你的时间大约能撑起 4 个 Session。这和原文观察到的“3 到 5 个”在同一量级。模型越能独立工作，这个数越大；切换代价越高，这个数越小。</div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="lesson-sec" id="s3">
+  <h2><span class="num">03</span>简单扩展为什么不够</h2>
+  <p>一个直觉做法是：在现有的本地单会话 Agent 上，用 CLI、MCP 或外部连接器接入消息。原文认为，这样 Agent 虽然能收到外部消息，但仍有三个问题，需要大量人工维护。</p>
+  <div class="vs">
+    <div><h4>① 单会话同步阻塞</h4><p>一个会话一次只做一件事。它跑长任务时，新消息只能排队。</p></div>
+    <div><h4>② 多任务上下文混乱</h4><p>多项任务的中间细节挤在同一个上下文里，互相干扰。</p></div>
+    <div><h4>③ 本地设备离线即停</h4><p>笔记本合上、休眠或断网，Agent 就停止运行。</p></div>
+  </div>
+  <p>要突破这些限制，就要<b>打破 Agent 与单次手动会话的绑定</b>。</p>
+</section>
+
+<!-- ============ 4 ============ -->
+<section class="lesson-sec" id="s4">
+  <h2><span class="num">04</span>什么是 Super-agent</h2>
+  <div class="callout rule"><span class="ttl">原文定义</span>使 Agent 成为一个能跨会话保持上下文、同时推进多项复杂任务且互不干扰的连续实体。我们把这种 Agent 形态及其系统架构称为 Super-agent。</div>
+  <p>注意两点。第一，Super-agent 既指一种<b>Agent 形态</b>，也指支撑它的<b>系统架构</b>。第二，关键词是“连续实体”：对用户来说，始终只有一个 Agent。</p>
+  <p>原文给了两个内部实例。这个 Super-agent 实例基于 <a class="term" href="glossary.html#dsh">DeepSeek Harness</a> 运行。</p>
+  <figure class="fig"><img src="img/fig01.jpg" alt="同一个任务在 IM 群聊与 GitHub Pull Request 评审之间连续推进"><figcaption><b>原文图 1</b>同一个开发任务在 IM 群聊与 GitHub Pull Request 评审之间连续推进。</figcaption></figure>
+  <figure class="fig"><img src="img/fig02.jpg" alt="持续关注公共群聊，在无人 @ 的情况下主动识别缺陷并提交修复 Pull Request"><figcaption><b>原文图 2</b>持续关注公共群聊。在无人 @ 的情况下，主动识别缺陷，定位根因，并提交修复 Pull Request。</figcaption></figure>
+  <div class="callout tip"><span class="ttl">看图要点</span>图 1 体现“连续”：信道变了，任务没断。图 2 体现“主动”：没人叫它，它自己判断值得做，并且做完才说话。</div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section class="lesson-sec" id="s5">
+  <h2><span class="num">05</span>四个基础特征</h2>
+  <p>原文认为 Super-agent 具备四个基础特征。记住这四个词，后面每一课都会回到它们。</p>
+  <div class="grid-2">
+    <div class="kp"><div class="k">特征 1</div><div class="v">连续</div><p>你在 IM、GitHub 评论等熟悉的界面和它交互，感觉始终只有一个 Agent。你不用去想“Session X 里有没有 Y 信息”。例如：先在 IM 定了方案 A，再在 PR 评论里改成方案 B，它能理解并调整方向。</p></div>
+    <div class="kp"><div class="k">特征 2</div><div class="v">高效</div><p>交互响应快，同时能并行、高质量地完成多个复杂任务。不用等上一个任务完成，就能接下一条指令。</p></div>
+    <div class="kp"><div class="k">特征 3</div><div class="v">主动</div><p>不等你逐条下指令。它持续观察环境事件，主动推进值得处理的事。不需要它时，保持安静。</p></div>
+    <div class="kp"><div class="k">特征 4</div><div class="v">持久</div><p>始终在线，直接接入你真实的工作环境。长期运行中遇到异常，能自动恢复。</p></div>
+  </div>
+  <div class="callout warn"><span class="ttl">常见误解</span>“主动”不等于“话多”。原文的“主动”包含后半句：不需要介入时保持安静。主动是指“自己发现值得做的事”，不是“频繁打扰人”。</div>
+  <p>原文接着指出：<b>单个 <a class="term" href="glossary.html#react-loop">ReAct Loop</a> 无法同时支持这四个特征</b>，底层需要一套相应的架构。</p>
+</section>
+
+<!-- ============ 6 ============ -->
+<section class="lesson-sec" id="s6">
+  <h2><span class="num">06</span>五个模块：全景图</h2>
+  <p>原文的核心判断是：<b>相似的设计约束会导出相似的架构选择。</b>不管是个人助手，还是软件开发场景的 Agent，只要目标是“持续在线、并发响应环境事件”，底层就可能采用相近的架构。这些问题和传统计算机系统长期讨论的问题高度相似，所以很多经典设计思想可以直接借用。</p>
+  <figure class="fig"><img src="img/fig03.jpg" alt="Super-agent 整体系统架构"><figcaption><b>原文图 3</b>Super-agent 整体系统架构。标号 [2] 至 [6] 对应原文第 2 至第 6 节。</figcaption></figure>
+
+  <div class="chart-card" id="demo2">
+    <div class="chart-head">
+      <div class="chart-title">动手看：哪个模块支撑哪个特征</div>
+    </div>
+    <div class="demo">
+      <div class="map-row">按特征看：
+        <button class="btn" data-trait="连续">连续</button><button class="btn" data-trait="高效">高效</button><button class="btn" data-trait="主动">主动</button><button class="btn" data-trait="持久">持久</button>
+        <button class="btn" data-trait="">全部</button>
+      </div>
+      <svg class="arch" viewBox="0 0 900 330" role="img" aria-label="Super-agent 架构示意">
+        <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="currentColor"/></marker></defs>
+        <g style="color: var(--ink-3)">
+          <path class="edge" d="M190 60 H215" marker-end="url(#ar)"/>
+          <path class="edge" d="M370 60 H395" marker-end="url(#ar)"/>
+          <path class="edge" d="M650 60 H685" marker-end="url(#ar)"/>
+          <path class="edge" d="M480 100 V145" marker-end="url(#ar)"/>
+          <path class="edge" d="M580 100 V145" marker-end="url(#ar)"/>
+          <path class="edge dash" d="M295 90 V177 H297" marker-end="url(#ar)"/>
+          <path class="edge" d="M670 177 H695" marker-end="url(#ar)"/>
+          <path class="edge" d="M385 205 V245" marker-end="url(#ar)"/>
+          <path class="edge" d="M585 205 V245" marker-end="url(#ar)"/>
+          <path class="edge dash" d="M210 277 H295" marker-end="url(#ar)"/>
+        </g>
+        <g data-mod="3"><rect class="box" x="20" y="30" width="170" height="60" rx="8"/><text x="105" y="56" text-anchor="middle">环境事件 Trigger</text><text class="sm" x="105" y="76" text-anchor="middle">群消息 / PR / CI</text><text class="tag" x="28" y="44">[3]</text></g>
+        <g data-mod="3"><rect class="box" x="220" y="30" width="150" height="60" rx="8"/><text x="295" y="56" text-anchor="middle">两级过滤</text><text class="sm" x="295" y="76" text-anchor="middle">Fast / Slow Path</text><text class="tag" x="228" y="44">[3]</text></g>
+        <g data-mod="2"><rect class="box" x="400" y="20" width="250" height="80" rx="8"/><text x="525" y="55" text-anchor="middle" style="font-weight:700">Router 层</text><text class="sm" x="525" y="76" text-anchor="middle">共享上下文，全局路由与交互</text><text class="tag" x="408" y="34">[2]</text></g>
+        <g data-mod="4"><rect class="box" x="690" y="30" width="190" height="60" rx="8"/><text x="785" y="56" text-anchor="middle">多信道交互</text><text class="sm" x="785" y="76" text-anchor="middle">IM / GitHub / 邮件</text><text class="tag" x="698" y="44">[4]</text></g>
+        <g data-mod="2"><rect class="box" x="300" y="150" width="170" height="55" rx="8"/><text x="385" y="175" text-anchor="middle">Worker Session 1</text><text class="sm" x="385" y="193" text-anchor="middle">隔离上下文</text><text class="tag" x="308" y="164">[2]</text></g>
+        <g data-mod="2"><rect class="box" x="500" y="150" width="170" height="55" rx="8"/><text x="585" y="175" text-anchor="middle">Worker Session N</text><text class="sm" x="585" y="193" text-anchor="middle">隔离上下文</text><text class="tag" x="508" y="164">[2]</text></g>
+        <g data-mod="5"><rect class="box" x="700" y="150" width="180" height="55" rx="8" stroke-dasharray="5 4"/><text x="790" y="175" text-anchor="middle">执行环境</text><text class="sm" x="790" y="193" text-anchor="middle">轻量 daemon 原地接入</text><text class="tag" x="708" y="164">[5]</text></g>
+        <g data-mod="6"><rect class="box" x="20" y="250" width="190" height="55" rx="8"/><text x="115" y="275" text-anchor="middle">Watchdog</text><text class="sm" x="115" y="293" text-anchor="middle">外部监控与自愈</text><text class="tag" x="28" y="264">[6]</text></g>
+        <g data-mod="5"><rect class="box" x="300" y="250" width="370" height="55" rx="8"/><text x="485" y="275" text-anchor="middle">Session 数据库</text><text class="sm" x="485" y="293" text-anchor="middle">持久化存储所有 Session 状态</text><text class="tag" x="308" y="264">[5]</text></g>
+        <text class="sm" x="230" y="128">订阅直通</text>
+      </svg>
+    </div>
+    <div class="chart-body" style="padding:0 16px"><div class="readout" id="d2-out"></div></div>
+    <div class="chart-foot">点上面的特征按钮，图中会高亮支撑它的模块。也可以直接点图中的方框，看这个模块在哪一课展开。<span class="data-note">此图依据原文图 3 重绘；特征与模块的对应关系出自原文 §1 末段。</span></div>
+  </div>
+
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>模块（原文章节）</th><th>主要支撑的特征</th><th>借用的经典系统思想</th><th>本课程</th></tr>
+    <tr><td>[2] 双层架构（§2）</td><td>连续 + 高效</td><td>中心协调 + 并行执行；<a class="term" href="glossary.html#batching">批处理</a></td><td><a href="SA02-two-layer.html">SA02</a></td></tr>
+    <tr><td>[3] 事件驱动（§3）</td><td>主动</td><td><a class="term" href="glossary.html#fast-slow-path">Fast / Slow Path</a>、Cache 与<a class="term" href="glossary.html#locality">局部性</a>、<a class="term" href="glossary.html#speculative-execution">投机执行</a></td><td><a href="SA03-event-filter-route.html">SA03</a>、<a href="SA04-context-speculation.html">SA04</a></td></tr>
+    <tr><td>[4] 面向人的交互（§4）</td><td>连续 + 高效</td><td>半双工 → 全双工（异步 I/O）</td><td><a href="SA05-human-interaction.html">SA05</a></td></tr>
+    <tr><td>[5] 计算、状态与环境的分离（§5）</td><td>持久</td><td><a class="term" href="glossary.html#compute-storage-separation">存算分离</a></td><td><a href="SA06-separation-watchdog.html">SA06</a></td></tr>
+    <tr><td>[6] Watchdog（§6）</td><td>持久</td><td>外部 <a class="term" href="glossary.html#control-loop">Control Loop</a></td><td><a href="SA06-separation-watchdog.html#s5">SA06</a></td></tr>
+  </table></div>
+  <div class="callout note"><span class="ttl">补充：怎样读这张表</span>“借用的经典系统思想”一列综合了原文各节的表述。原文在结语里明确说：“我们并没有提出全新的理论，而是将计算机系统中经典的工程思想应用到了 Agent 系统的构建中。”带着这张表读后面各课，你会发现每个模块都能在操作系统、数据库或 CPU 设计里找到“前辈”。</div>
+</section>
+
+<!-- ============ 7 ============ -->
+<section class="lesson-sec" id="s7">
+  <h2><span class="num">07</span>自测与速记</h2>
+  <div class="quiz" data-answer="2">
+    <div class="q">按原文的说法，在以 Session 为单位的设计下，多任务的上限取决于什么？</div>
+    <div class="opts"><button>模型的上下文长度</button><button>模型的推理能力</button><button>人的注意力</button><button>工具的数量</button></div>
+    <div class="explain">原文：“单任务的上限取决于模型能力，多任务的上限取决于人的注意力。”一个人通常只能同时跟进 3 到 5 个活跃 Session。</div>
+  </div>
+  <div class="quiz" data-answer="1">
+    <div class="q">下面哪一项<b>不是</b>原文列出的“简单扩展”方案（在本地单会话 Agent 上接 CLI/MCP/连接器）的问题？</div>
+    <div class="opts"><button>单会话同步阻塞</button><button>模型不会调用工具</button><button>多任务上下文混乱</button><button>本地设备离线即停止运行</button></div>
+    <div class="explain">原文列的三个问题是：单会话同步阻塞、多任务上下文混乱、本地设备离线即停止运行。模型调用工具的能力已经被单任务 Agent 证明了。</div>
+  </div>
+  <div class="quiz" data-answer="3">
+    <div class="q">“主动”这个特征的完整含义是？</div>
+    <div class="opts"><button>收到消息后尽快回复</button><button>每完成一步就通知用户</button><button>同时执行尽可能多的任务</button><button>持续观察环境事件，主动推进值得处理的事；不需要介入时保持安静</button></div>
+    <div class="explain">主动包括两半：自己发现值得做的事，以及没事时不打扰人。后者常被忽略。</div>
+  </div>
+  <div class="quiz" data-answer="0">
+    <div class="q">“持久”这个特征主要由哪两个模块支撑？</div>
+    <div class="opts"><button>计算、状态与环境的分离 + Watchdog</button><button>双层架构 + 事件驱动</button><button>事件驱动 + 面向人的交互</button><button>双层架构 + Watchdog</button></div>
+    <div class="explain">原文：通过计算、状态与环境的分离（第 5 节）及 Watchdog（第 6 节），实现跨设备的持久在线与异常自愈。</div>
+  </div>
+
+  <h3>速记表</h3>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>要点</th><th>一句话</th></tr>
+    <tr><td>新瓶颈</td><td>单任务看模型，多任务看注意力；一人约跟 3–5 个活跃 Session</td></tr>
+    <tr><td>定义</td><td>跨会话保持上下文、并行推进多任务且互不干扰的连续实体 + 其系统架构</td></tr>
+    <tr><td>四特征</td><td>连续、高效、主动、持久</td></tr>
+    <tr><td>五模块</td><td>双层架构、事件驱动、面向人的交互、计算/状态/环境分离、Watchdog</td></tr>
+    <tr><td>方法论</td><td>相似的设计约束 → 相似的架构；借用计算机系统的经典思想</td></tr>
+  </table></div>
+
+  <h3>相关课程</h3>
+  <div class="related">
+    <a href="SA02-two-layer.html"><small>下一课 · SA02</small>双层架构：Router 与 Worker</a>
+    <a href="SA07-experiments.html"><small>SA07</small>读懂实验：消融与批处理</a>
+    <a href="SA08-prototype.html"><small>SA08</small>开源原型 dsh-superagent 拆解</a>
+  </div>
+</section>
+
+<nav id="sa-pager" data-current="SA01-why-super-agent.html"></nav>
+<p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§1（2026-10-31）。标为“补充”的内容和模拟演示是课程作者的解释，不是原文观点。</p>
+</main>
+</div>
+
+<script>
+SA.onReady(function () {
+  /* ---- 1. 注意力瓶颈模拟 ---- */
+  const H = 1.5, T = 120, SHOW = 60;
+  function simulate(n, a, s, seed) {
+    const r = SA.rng(seed);
+    const lanes = Array.from({ length: n }, (_, k) => ({ name: "Session " + (k + 1), segs: [] }));
+    const human = { name: "你", segs: [] };
+    // 每个 Session：工作 → 进入等待队列 → 被你处理 → 继续工作
+    const readyAt = Array.from({ length: n }, () => a * (0.5 + r()));
+    for (let k = 0; k < n; k++) lanes[k].segs.push({ t0: 0, t1: readyAt[k], cls: "c1" });
+    let t = 0, last = -1, humanBusy = 0, cycles = 0, waitSum = 0;
+    while (t < T) {
+      // 选最早进入等待的 Session（先来先服务）
+      let k = -1; for (let i = 0; i < n; i++) if (k < 0 || readyAt[i] < readyAt[k]) k = i;
+      const start = Math.max(t, readyAt[k]);
+      if (start >= T) break;
+      const cost = H + (last >= 0 && last !== k ? s : 0);
+      const end = start + cost;
+      if (start > readyAt[k]) lanes[k].segs.push({ t0: readyAt[k], t1: start, cls: "c5" });
+      waitSum += start - readyAt[k];
+      lanes[k].segs.push({ t0: start, t1: end, cls: "c2" });
+      human.segs.push({ t0: start, t1: end, cls: "c2", text: "S" + (k + 1) });
+      humanBusy += Math.min(end, T) - start; cycles++;
+      const work = a * (0.5 + r());
+      lanes[k].segs.push({ t0: end, t1: end + work, cls: "c1" });
+      readyAt[k] = end + work; t = end; last = k;
+    }
+    // 统计 Agent 干活的分钟数（截到 T）
+    let agentWork = 0, agentWait = 0;
+    for (const l of lanes) for (const g of l.segs) { const d = Math.max(0, Math.min(g.t1, T) - Math.min(g.t0, T)); if (g.cls === "c1") agentWork += d; if (g.cls === "c5") agentWait += d; }
+    for (let i = 0; i < n; i++) if (readyAt[i] < T && !lanes[i].segs.some((g) => g.cls === "c2" && g.t0 >= readyAt[i])) { agentWait += T - readyAt[i]; lanes[i].segs.push({ t0: readyAt[i], t1: T, cls: "c5" }); }
+    return { lanes, human, util: humanBusy / T, agentWork, agentWait, cycles };
+  }
+  function draw1() {
+    const n = +SA.$("#d1-n").value, a = +SA.$("#d1-a").value, s = +SA.$("#d1-s").value;
+    SA.$("#d1-nv").textContent = n; SA.$("#d1-av").textContent = a; SA.$("#d1-sv").textContent = s.toFixed(1);
+    const res = simulate(n, a, s, 7);
+    const clip = (segs) => segs.filter((g) => g.t0 < SHOW).map((g) => Object.assign({}, g, { t1: Math.min(g.t1, SHOW) }));
+    SA.lanes("#d1-lanes", [{ name: "你（人）", segs: clip(res.human.segs) }].concat(res.lanes.map((l) => ({ name: l.name, segs: clip(l.segs) }))), { t1: SHOW, unit: " 分" });
+    // 扫一遍 1..10，找出“再加一个 Session，产出增长不到 10%”的点
+    const curve = []; for (let k = 1; k <= 10; k++) curve.push(simulate(k, a, s, 7).agentWork);
+    let knee = 10; for (let k = 1; k < 10; k++) if (curve[k] < curve[k - 1] * 1.1) { knee = k; break; }
+    SA.$("#d1-out").textContent =
+      "2 小时内：Agent 干活 " + SA.fmt(res.agentWork, 0) + " 分钟，停着等你 " + SA.fmt(res.agentWait, 0) + " 分钟（" + SA.fmt((100 * res.agentWait) / Math.max(1, res.agentWork + res.agentWait), 0) + "%）\n" +
+      "你的时间利用率 " + SA.fmt(res.util * 100, 0) + "%，共处理 " + res.cycles + " 次\n" +
+      "产出曲线（Session 数 1→10 的 Agent 干活分钟）：" + curve.map((x) => SA.fmt(x, 0)).join(" · ") + "\n" +
+      "在当前参数下，大约开到 " + knee + " 个 Session 后，再加一个，产出增长不到 10%。";
+  }
+  ["#d1-n", "#d1-a", "#d1-s"].forEach((id) => SA.$(id).addEventListener("input", draw1));
+  draw1();
+
+  /* ---- 2. 特征 ↔ 模块 ---- */
+  const TRAIT = { "连续": ["2", "4"], "高效": ["2", "4"], "主动": ["3"], "持久": ["5", "6"] };
+  const MOD = {
+    "2": ["双层架构（§2）", "支撑连续 + 高效。Router 层统一交互与分派，Worker 层隔离并发执行。→ SA02"],
+    "3": ["事件驱动（§3）", "支撑主动。两级过滤、订阅与直通、Inline & Spill 与链式召回、投机执行。→ SA03、SA04"],
+    "4": ["面向人的交互（§4）", "支撑连续 + 高效。异步 ReAct Loop 实现全双工；按信道定制输出。→ SA05"],
+    "5": ["计算、状态与环境的分离（§5）", "支撑持久。Agent Loop 上云、状态进数据库、执行环境用端侧 daemon 原地接入。→ SA06"],
+    "6": ["Watchdog（§6）", "支撑持久。主系统外的独立 Agent 会话，用定时消息驱动，监控基础设施和任务进展。→ SA06"],
+  };
+  const groups = SA.$$("#demo2 [data-mod]"), out2 = SA.$("#d2-out");
+  function show(mods, label) {
+    groups.forEach((g) => { const on = !mods || mods.includes(g.dataset.mod); g.querySelector("rect").classList.toggle("hl", !!mods && on); g.style.opacity = on ? 1 : 0.3; });
+    out2.textContent = label;
+  }
+  SA.$$("#demo2 [data-trait]").forEach((b) => b.addEventListener("click", () => {
+    SA.$$("#demo2 [data-trait]").forEach((x) => x.classList.toggle("on", x === b));
+    const t = b.dataset.trait;
+    if (!t) return show(null, "五个模块共同支撑四个特征。点一个特征，看它靠哪些模块。");
+    const mods = TRAIT[t];
+    show(mods, "特征「" + t + "」由以下模块支撑：\n" + mods.map((m) => "· " + MOD[m][0] + "：" + MOD[m][1]).join("\n"));
+  }));
+  groups.forEach((g) => g.addEventListener("click", () => {
+    SA.$$("#demo2 [data-trait]").forEach((x) => x.classList.remove("on"));
+    const m = g.dataset.mod; show([m], MOD[m][0] + "\n" + MOD[m][1]);
+  }));
+  show(null, "五个模块共同支撑四个特征。点一个特征，看它靠哪些模块。");
+});
+</script>
+</body>
+</html>

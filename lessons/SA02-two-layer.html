@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>双层架构 · SA02</title>
+<link rel="stylesheet" href="assets/sa-lesson.css">
+<script src="assets/glossary-data.js"></script>
+<script src="assets/sa-lib.js"></script>
+<style>
+  .scheme { margin: 4px 0 16px; }
+  .scheme h5 { margin: 0 0 6px; font-size: 14px; color: var(--brand); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .scheme h5 small { font-weight: 400; color: var(--ink-3); font-size: 12.5px; }
+  .ok { color: var(--up); font-weight: 700; } .no { color: var(--down); font-weight: 700; }
+</style>
+</head>
+<body>
+<header id="sa-topbar"></header>
+
+<div class="layout">
+<aside class="toc">
+  <h4>本课目录</h4>
+  <ol>
+    <li><a href="#s1">根本权衡：连续性与吞吐量</a></li>
+    <li><a href="#s2">拆成两层</a></li>
+    <li><a href="#s3">Router 层：只交互，只分派</a></li>
+    <li><a href="#s4">单个 Router 为什么不是瓶颈</a></li>
+    <li><a href="#s5">Worker 层：隔离并发</a></li>
+    <li><a href="#s6">自测与速记</a></li>
+  </ol>
+</aside>
+
+<main>
+<div class="hero">
+  <div class="kicker">SA02 · 核心架构</div>
+  <h1>双层架构：Router 与 Worker</h1>
+  <p>一个会话很连续，但慢；很多会话很快，但割裂。双层架构把“维护全局连续性”和“高并发执行”拆到两个层级，两头都要。</p>
+  <div class="meta"><span>原文：§2 双层架构（2.1 Router 层、2.2 Worker 层）</span><span>阅读约 18 分钟</span><span>含 2 个互动演示、1 张原文图</span></div>
+</div>
+
+<div class="objectives">
+  <h4>学完本课，你能够：</h4>
+  <ul>
+    <li>说清会话组织上“连续性与吞吐量”的根本权衡，以及两个极端方案各自的问题。</li>
+    <li>说出 <a class="term" href="glossary.html#router">Router 层</a>和 <a class="term" href="glossary.html#worker">Worker 层</a>各自负责什么、不负责什么、该配什么模型。</li>
+    <li>区分双层架构与常见的 <a class="term" href="glossary.html#agent-team">Agent Team</a>。</li>
+    <li>用<a class="term" href="glossary.html#batching">批处理</a>机制解释：为什么单个常驻 Router Session 不容易成为瓶颈。</li>
+  </ul>
+</div>
+
+<!-- ============ 1 ============ -->
+<section class="lesson-sec" id="s1">
+  <h2><span class="num">01</span>根本权衡：连续性与吞吐量</h2>
+  <p>先说结论：要同时做到跨信道的“连续”和多任务的“高效”，会话怎么组织，就是一道二选一的题。原文把它叫作<a class="term" href="glossary.html#continuity-throughput">连续性与吞吐量的根本权衡</a>（Trade-off）。</p>
+  <div class="vs">
+    <div><h4>极端一：所有事件进同一个 Session</h4>
+      <p><span class="good">✓ 上下文最连续。</span></p>
+      <p><span class="bad">✗ 慢。</span>单个 <a class="term" href="glossary.html#react-loop">ReAct Loop</a> 串行执行，有速度上限。任务完成耗时长，<a class="term" href="glossary.html#throughput">吞吐</a>低。</p>
+      <p><span class="bad">✗ 互相干扰。</span>多个任务的中间细节混在一起，会影响完成效果。</p></div>
+    <div><h4>极端二：每个事件新开一个 Session</h4>
+      <p><span class="good">✓ 并发吞吐最高。</span></p>
+      <p><span class="bad">✗ 结果割裂。</span>任务之间并不完全独立。缺少全局上下文，各个 Session 的结果彼此割裂。</p>
+      <p><span class="bad">✗ 交互混乱。</span>多个 Session 各自向用户回复。</p></div>
+  </div>
+  <p>下面的模拟用同一串事件，比较这两个极端和双层架构。事件里有 4 个任务（A–D），其中两条是“跟进”：用户改主意，或补充要求。</p>
+
+  <div class="chart-card" id="demo1">
+    <div class="chart-head">
+      <div class="chart-title">模拟：同一串事件，三种组织方式</div>
+      <label class="ctrl">每个任务执行 = <b id="d1-wv">10</b> 分钟 <input id="d1-w" type="range" min="3" max="30" value="10"></label>
+      <label class="ctrl">事件间隔 = <b id="d1-gv">2</b> 分钟 <input id="d1-g" type="range" min="0.5" max="8" step="0.5" value="2"></label>
+    </div>
+    <div class="legend"><span><i style="background:#3d7be8"></i>执行任务</span><span><i style="background:#16a085"></i>按跟进调整</span><span><i style="background:#d64541"></i>缺上下文 / 结果冲突</span><span><i style="background:#9b59b6"></i>Router 路由与分派</span></div>
+    <div class="demo" id="d1-demo"></div>
+    <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
+    <div class="chart-foot">事件依次是：A 新任务 → B 新任务 → <b>A 跟进：改用方案 B</b> → C 新任务 → <b>B 跟进：补一个测试</b> → D 新任务。看三处：①最后一个任务何时完成；②有几个“声音”在回复用户；③“A 改用方案 B”这条跟进，有没有送到真正在做 A 的地方。<br><span class="data-note">简化模型：跟进事件需要额外 40% 的执行时间；Router 每次路由耗时 0.3 分钟。这里 Router 把跟进转给已有 Worker；SA03 会讲更快的“订阅与直通”。数字只用来说明机制，不是原文实验。</span></div>
+  </div>
+  <div class="callout tip"><span class="ttl">看模拟要点</span>把“事件间隔”调小（事件密集），单 Session 方案的完成时间会明显拉长：后面的事件被前面的长任务堵住，这叫<a class="term" href="glossary.html#head-of-line-blocking">队头阻塞</a>。“每事件一个 Session”最快，但 A 的跟进落进了一个对 A 一无所知的新 Session，原来那个 Session 还在按方案 A 干活。</div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section class="lesson-sec" id="s2">
+  <h2><span class="num">02</span>拆成两层</h2>
+  <p>为了兼顾连续性与吞吐量，原文把两件事拆到两个层级：</p>
+  <ul>
+    <li>常驻的 <b>Router 层</b>统一承接人类交互，负责全局协调。</li>
+    <li>上下文隔离的 <b>Worker 层</b>并发执行具体任务。</li>
+  </ul>
+  <figure class="fig"><img src="img/fig04.jpg" alt="双层架构：Router 层统一负责路由与对外交互，多个 Worker Session 隔离并发执行任务"><figcaption><b>原文图 4</b>双层架构：Router 层统一负责路由与对外交互，多个 Worker Session 隔离并发执行任务。</figcaption></figure>
+  <p>这样，系统在底层接管了上下文管理与并发执行。用户侧感觉不到 Session 的存在，面对的始终是同一个 Super-agent。</p>
+  <blockquote class="src">让用户手动管理 Session，在很大程度上是从底层 LLM API 延续下来的设计惯性；Session 应当是系统的实现细节，而不应是用户的认知负担。<cite>§2</cite></blockquote>
+  <p>原文还指出一个连带的变化。在现有设计里，<a class="term" href="glossary.html#session">Session</a> 同时承担两件事：技术上的上下文管理，和面向用户的项目管理。把产品形态与底层 Session 解耦后，项目管理不再受 Session 限制。“向用户暴露怎样的交互与任务管理方式”变成了一个独立的产品问题。这个问题留到 <a href="SA09-open-problems.html">SA09</a> 讨论。</p>
+  <div class="callout warn"><span class="ttl">常见误解</span>“双层”不等于“两个 Session”。原文说明：这是<b>逻辑上的职责划分</b>。每一层在实现上都不必局限于单个 Session，可以有各自的内部结构。</div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="lesson-sec" id="s3">
+  <h2><span class="num">03</span>Router 层：只交互，只分派</h2>
+  <p>Router 层是<b>常驻的全局路由层</b>，承接所有入口的人类交互。所有跨任务的信息与决策都在这里汇总。原文给了它三个身份：</p>
+  <div class="grid-3">
+    <div class="kp"><div class="k">身份 1</div><div class="v">全局序点</div><p>跨信道的指令在这里排出先后。先在 IM 说方案 A、后在 PR 改方案 B，顺序是确定的。见<a class="term" href="glossary.html#sequence-point">序点</a>。</p></div>
+    <div class="kp"><div class="k">身份 2</div><div class="v">协调点</div><p>任务之间的高层关联在这里处理。少数跨任务协同，也由它中转。</p></div>
+    <div class="kp"><div class="k">身份 3</div><div class="v">记忆</div><p>它保存全局上下文。用户跨信道提起旧任务，由它找回来。</p></div>
+  </div>
+  <div class="callout rule"><span class="ttl">设计约束</span>为了不让这个全局节点成为性能瓶颈，Router 层不直接执行具体任务，只负责人类交互与任务分派，甚至可以不配备 Bash 工具。</div>
+
+  <h3>Router 与 Agent Team 的区别</h3>
+  <p>“一个中心节点分派多个执行节点”，表面上像常见的 Agent Team。原文指出，两者的侧重点不同。</p>
+  <div class="vs">
+    <div><h4>常见的 Agent Team</h4><p>用于<b>单个复杂任务内部</b>的步骤拆解与角色协作。</p><p>子步骤耦合紧。Team Lead 要深入理解任务细节、规划子任务、高频协调成员。</p><p><span class="bad">Lead 的推理负载很重。</span></p></div>
+    <div><h4>Super-agent 的 Router</h4><p>只处理<b>任务之间</b>的高层关联与分派。</p><p>不介入单任务内部的拆解。</p><p><span class="good">推理负载轻，可以用较轻量的模型。</span></p></div>
+  </div>
+  <p>反过来也成立。如果用提示词约束一个 Agent Team 的主会话：不亲自执行具体任务，只负责对外交互，把不同任务分派给各成员独立推进，那么它也可以视为这种双层架构。</p>
+  <div class="callout note"><span class="ttl">原文实践</span>Router 层的任务常常没有想象中复杂。使用较轻量的模型，往往就能兼顾速度与效果。Router 的内部也不必局限于单个 Session，甚至部分逻辑未必需要调用 LLM。原文选择了最直接的实现：单个常驻 LLM Session。</div>
+  <div class="callout note"><span class="ttl">补充：一个比喻</span>Router 像餐厅前台：接待所有客人，记得每桌点了什么，把单子分给后厨。前台不下厨。后厨（Worker）各做各的菜，不出来和客人聊天。客人改主意时只找前台，前台知道该转给哪位厨师。</div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section class="lesson-sec" id="s4">
+  <h2><span class="num">04</span>单个 Router 为什么不是瓶颈</h2>
+  <p>所有交互都过一个 Session，它会不会被挤爆？原文的答案是：没有表面看起来那么容易。原因是<b>批处理（Batching）</b>。</p>
+  <p>Router 在推理一轮时，新到的环境事件（<a class="term" href="glossary.html#trigger">Trigger</a>）会积压下来。下一轮，这些积压事件一并处理。合并的额外开销很小。</p>
+  <ul>
+    <li><b>事件流平稳时</b>：Trigger 逐条进入 Router Session，单次响应延迟低。</li>
+    <li><b>事件密集涌入时</b>：上一轮积压的多条 Trigger 自动合并，在下一次 LLM 调用中一并注入。</li>
+  </ul>
+  <p>为什么合并很便宜？Router 只做轻量的交互与分派，每步通常是<b>长输入、短输出</b>。多条 Trigger 合进一次 API 调用，会在 <a class="term" href="glossary.html#prefill">Prefill</a> 阶段并行计算。单次请求耗时的增长，远慢于批大小的增长。所以在一定范围内，积压越多，单个决定分摊的推理时间越低。</p>
+  <p>上限取决于两件事：上下文长度，以及模型在一轮中能准确处理多少条 Trigger。</p>
+
+  <div class="chart-card" id="demo2">
+    <div class="chart-head">
+      <div class="chart-title">模拟：Trigger 越密，Router 越“划算”</div>
+      <label class="ctrl">到达速率 = <b id="d2-rv">10</b> 条/分钟 <input id="d2-r" type="range" min="1" max="40" value="10"></label>
+      <label class="ctrl">耗时模型 <select id="d2-m"><option value="prefill">合并很便宜（Prefill 并行）</option><option value="naive">合并不便宜（每条全价）</option></select></label>
+    </div>
+    <div class="legend"><span><i style="background:#9b59b6"></i>Router 一次 LLM 请求（数字 = 本轮合并的 Trigger 条数）</span><span><i style="background:#e8a33d"></i>Trigger 到达</span></div>
+    <div class="demo" id="d2-lanes"></div>
+    <div class="chart-body" style="padding:0 16px"><div class="readout" id="d2-out"></div></div>
+    <div class="chart-foot">把速率从 1 拖到 40。在“合并很便宜”模型下，平均 batch 变大，单次请求只慢一点，每条 Trigger 分摊的时间明显下降。切到“合并不便宜”，同样的速率会让队列越积越长、等待时间失控：批处理省下的，正是这部分。<br><span class="data-note">简化模型：单次请求耗时 = 1.72 秒 + 0.78 秒 × batch（用原文 7.2 的两个端点拟合）；“每条全价”= 2.5 秒 × batch。到达随机，模拟 10 分钟，图中只画前 60 秒。本模型的“分摊”= 单次耗时 ÷ batch，与原文的统计口径不完全相同，只看趋势。</span></div>
+  </div>
+
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>原文 7.2 压测（Router 用真实模型，Worker 用 Mock）</th><th>约 1 条/分钟</th><th>约 40 条/分钟</th></tr>
+    <tr><td>平均 batch 大小</td><td>1.0</td><td>2.8</td></tr>
+    <tr><td>单次请求耗时</td><td>2.5 秒</td><td>3.9 秒</td></tr>
+    <tr><td>单个决定分摊的推理时间</td><td>6.4 秒</td><td>1.6 秒</td></tr>
+  </table></div>
+  <p>原文据此认为：加上订阅与直通、链式召回（见 <a href="SA03-event-filter-route.html">SA03</a>、<a href="SA04-context-speculation.html">SA04</a>），单个常驻 Router Session 在保持上下文连续的同时，<b>在他们目前的团队规模下已经够用</b>。实验细节见 <a href="SA07-experiments.html">SA07</a>。</p>
+
+  <h3>真的不够时：切分</h3>
+  <p>规模再扩大、单个会话确实承载不了时，Router 层内部可以设计为多层过滤结构，或<a class="term" href="glossary.html#sharding">水平切分</a>（Sharding）为多个会话。</p>
+  <div class="callout warn"><span class="ttl">切分的代价</span>Router 层的内部设计，本质上又回到了连续性与吞吐量的权衡。切分粒度越细，并发吞吐越高，分片之间的记忆与上下文连续性越低。原文说：在全局记忆问题被解决之前，这一权衡始终存在。</div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section class="lesson-sec" id="s5">
+  <h2><span class="num">05</span>Worker 层：隔离并发</h2>
+  <p>Worker 层由负责具体执行的会话组成。记住四条规则。</p>
+  <ol class="steps">
+    <li><b>上下文隔离。</b>各个 Worker 彼此隔离，挂载完整的执行工具，在独立上下文里专注完成单一任务。</li>
+    <li><b>配最强的模型。</b>Worker Session 直接决定任务结果与代码质量，通常要配置能力最强的模型。</li>
+    <li><b>不直接对人说话。</b>Worker 的推理过程和工具调用不输出到外部信道。它向 Router 汇报状态，由 Router 统一回复用户。这样既保住并发度和交付质量，又避免多个会话各自回复造成混乱。</li>
+    <li><b>同层不直接通信。</b>各 Worker 独立推进，通常不需要互相通信。</li>
+  </ol>
+  <div class="grid-2">
+    <div class="kp"><div class="k">Router 层</div><div class="v">轻量模型</div><p>交互、分派、全局记忆。不执行具体任务，可以不配 Bash。</p></div>
+    <div class="kp"><div class="k">Worker 层</div><div class="v">最强模型</div><p>执行具体任务，挂载完整工具。不直接对人说话。</p></div>
+  </div>
+  <h3>冲突怎么办</h3>
+  <p>多个 Worker 的冲突，往往出现在同一个 Pull Request 这类共享工作环境里。原文的做法不是让 Worker 互相通信，而是：只要它们都订阅了对应的 <a class="term" href="glossary.html#thread">Thread</a>，就会收到相同的事件通知，因此有机会自己发现并解决冲突。少数跨任务协同，由 Router 层中转。订阅机制在 <a href="SA03-event-filter-route.html#s4">SA03</a> 展开。</p>
+  <h3>Worker 内部也可以有结构</h3>
+  <p>和 Router 一样，Worker 不必局限于单个会话。执行复杂单任务时，Worker 内部可以再创建 <a class="term" href="glossary.html#subagent">Subagent</a>，也可以本身就是一个 Agent Team。这些对上层的 Router 保持透明。</p>
+  <div class="grid-2">
+    <div class="kp"><div class="k">代码协作场景</div><div class="v">多线并进</div><p>同时推进多个独立的问题复现、PR 评审和特性开发，互不阻塞。</p></div>
+    <div class="kp"><div class="k">个人助手场景</div><div class="v">一个窗口，多个话题</div><p>界面上通常只有一个聊天页。你在同一对话框里同时聊几个话题时，前端维持交互连续，底层为每个话题分派一个 Worker，并行推进任务、起草回复。</p></div>
+  </div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section class="lesson-sec" id="s6">
+  <h2><span class="num">06</span>自测与速记</h2>
+  <div class="quiz" data-answer="1">
+    <div class="q">“每个事件都新开一个独立 Session”的方案，主要问题是什么？</div>
+    <div class="opts"><button>吞吐量太低</button><button>缺少全局上下文，结果割裂；多个 Session 各自回复，交互混乱</button><button>上下文窗口会被撑满</button><button>无法使用工具</button></div>
+    <div class="explain">这个方案并发吞吐最高。问题在于任务之间并不完全独立：缺少全局上下文会让结果割裂，多个 Session 各自回复会让交互混乱。</div>
+  </div>
+  <div class="quiz" data-answer="2">
+    <div class="q">关于 Router 层，下面哪一项<b>不符合</b>原文？</div>
+    <div class="opts"><button>它是全局的序点、协调点和记忆</button><button>它可以不配备 Bash 工具</button><button>它通常需要配置能力最强的模型</button><button>它只负责人类交互与任务分派</button></div>
+    <div class="explain">需要最强模型的是 Worker 层，因为它直接决定任务结果与代码质量。原文的实践是：Router 的任务没有想象中复杂，较轻量的模型往往就能兼顾速度与效果。</div>
+  </div>
+  <div class="quiz" data-answer="0">
+    <div class="q">事件密集涌入时，单个 Router Session 仍能撑住，主要靠什么？</div>
+    <div class="opts"><button>积压的 Trigger 合并进下一次 LLM 调用，在 Prefill 阶段并行计算</button><button>自动切换到更快的模型</button><button>丢弃一部分事件</button><button>让 Worker 直接回复用户</button></div>
+    <div class="explain">这就是批处理。Router 每步是长输入、短输出，多条输入合并后单次耗时增长远慢于批大小。原文实测：batch 从 1.0 升到 2.8，单次请求从 2.5 秒到 3.9 秒，单个决定分摊时间从 6.4 秒降到 1.6 秒。</div>
+  </div>
+  <div class="quiz" data-answer="3">
+    <div class="q">两个 Worker 在同一个 PR 里改到了同一处代码。按原文的设计，它们一般怎样发现冲突？</div>
+    <div class="opts"><button>Worker 之间建立点对点通信</button><button>由用户手动通知</button><button>由 Watchdog 合并代码</button><button>它们都订阅了这个 PR 的 Thread，收到相同的事件通知</button></div>
+    <div class="explain">同层 Worker 通常不直接通信。只要都订阅了对应的 Thread，就会收到相同的事件，有机会自行发现和解决冲突。少数跨任务协同由 Router 中转。</div>
+  </div>
+
+  <h3>速记表</h3>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>要点</th><th>一句话</th></tr>
+    <tr><td>根本权衡</td><td>一个 Session：连续但慢、互相干扰；每事件一个 Session：快但割裂、回复混乱</td></tr>
+    <tr><td>拆分</td><td>Router 层管全局连续性与交互；Worker 层管隔离并发执行</td></tr>
+    <tr><td>Router</td><td>常驻；序点 + 协调点 + 记忆；不执行任务，可不配 Bash；轻量模型即可</td></tr>
+    <tr><td>vs Agent Team</td><td>Team Lead 拆解单任务、负载重；Router 只管任务之间的关联与分派</td></tr>
+    <tr><td>不是瓶颈</td><td>积压 Trigger 自动批处理；长输入短输出，Prefill 并行</td></tr>
+    <tr><td>切分</td><td>多层过滤或水平切分；越细吞吐越高、连续性越低</td></tr>
+    <tr><td>Worker</td><td>隔离、最强模型、不对人说话、同层不通信、靠订阅 Thread 发现冲突</td></tr>
+  </table></div>
+
+  <h3>相关课程</h3>
+  <div class="related">
+    <a href="SA01-why-super-agent.html"><small>上一课 · SA01</small>为什么需要 Super-agent</a>
+    <a href="SA03-event-filter-route.html"><small>下一课 · SA03</small>事件驱动（上）：过滤与路由</a>
+    <a href="SA07-experiments.html"><small>SA07</small>读懂实验：消融与批处理</a>
+  </div>
+</section>
+
+<nav id="sa-pager" data-current="SA02-two-layer.html"></nav>
+<p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§2、§7.2（2026-10-31）。标为“补充”的内容和模拟演示是课程作者的解释，不是原文观点。</p>
+</main>
+</div>
+
+<script>
+SA.onReady(function () {
+  /* ---- 1. 三种组织方式 ---- */
+  const EV = [
+    { k: 0, task: "A", kind: "new", text: "A 新任务：修登录测试" },
+    { k: 1, task: "B", kind: "new", text: "B 新任务：加活动摘要" },
+    { k: 2, task: "A", kind: "follow", text: "A 跟进：改用方案 B" },
+    { k: 3, task: "C", kind: "new", text: "C 新任务：回应 PR 评审" },
+    { k: 4, task: "B", kind: "follow", text: "B 跟进：补一个测试" },
+    { k: 5, task: "D", kind: "new", text: "D 新任务：排查 CI 失败" },
+  ];
+  const ROUTE = 0.3;
+  function run(W, g) {
+    const F = 0.4 * W, ev = EV.map((e) => Object.assign({ t: e.k * g }, e));
+    const first = {}; ev.forEach((e) => { if (first[e.task] == null) first[e.task] = e.t; });
+    const stats = (done) => { const ts = Object.keys(done); return { make: Math.max(...ts.map((x) => done[x])), avg: ts.reduce((s, x) => s + done[x] - first[x], 0) / ts.length }; };
+    // 单 Session 串行
+    let cur = 0; const one = { name: "Session（唯一）", segs: [] }, d1 = {};
+    for (const e of ev) { const s = Math.max(cur, e.t), d = e.kind === "new" ? W : F; one.segs.push({ t0: s, t1: s + d, cls: e.kind === "new" ? "c1" : "c3", text: e.task, title: e.text }); cur = s + d; d1[e.task] = cur; }
+    // 每事件一个 Session
+    const many = [], d2 = {};
+    ev.forEach((e, i) => {
+      const d = e.kind === "new" ? W : F;
+      many.push({ name: "Session " + (i + 1), segs: [{ t0: e.t, t1: e.t + d, cls: e.kind === "new" ? "c1" : "c5", text: e.kind === "new" ? e.task : e.task + "′ 缺上下文", title: e.text }] });
+      d2[e.task] = Math.max(d2[e.task] || 0, e.t + d);
+    });
+    // 双层
+    let rc = 0; const router = { name: "Router", segs: [] }, workers = {}, d3 = {};
+    for (const e of ev) {
+      const rs = Math.max(rc, e.t), re = rs + ROUTE; rc = re;
+      router.segs.push({ t0: rs, t1: re, cls: "c4", title: e.text });
+      if (e.kind === "new") { workers[e.task] = { name: "Worker " + e.task, segs: [{ t0: re, t1: re + W, cls: "c1", text: e.task, title: e.text }], end: re + W }; }
+      else { const w = workers[e.task], s = Math.max(w.end, re); w.segs.push({ t0: s, t1: s + F, cls: "c3", text: e.task + " 调整", title: e.text }); w.end = s + F; }
+      d3[e.task] = workers[e.task].end;
+    }
+    return {
+      one: { lanes: [one], st: stats(d1) },
+      many: { lanes: many, st: stats(d2) },
+      two: { lanes: [router].concat(Object.values(workers)), st: stats(d3) },
+    };
+  }
+  function draw1() {
+    const W = +SA.$("#d1-w").value, g = +SA.$("#d1-g").value;
+    SA.$("#d1-wv").textContent = W; SA.$("#d1-gv").textContent = g;
+    const r = run(W, g), t1 = Math.max(r.one.st.make, r.many.st.make, r.two.st.make);
+    const box = SA.$("#d1-demo");
+    box.innerHTML = '<div class="scheme"><h5>① 所有事件进同一个 Session <small>回复：1 个声音 · 上下文连续 · 多任务细节混在一起</small></h5><div id="d1-a"></div></div>' +
+      '<div class="scheme"><h5>② 每个事件新开一个 Session <small>回复：6 个声音 · A、B 的跟进落进了不知情的新 Session</small></h5><div id="d1-b"></div></div>' +
+      '<div class="scheme"><h5>③ 双层架构：Router + Worker <small>回复：只由 Router 统一回复 · 跟进转给原 Worker</small></h5><div id="d1-c"></div></div>';
+    SA.lanes("#d1-a", r.one.lanes, { t1, unit: " 分" });
+    SA.lanes("#d1-b", r.many.lanes, { t1, unit: " 分" });
+    SA.lanes("#d1-c", r.two.lanes, { t1, unit: " 分" });
+    const row = (n, s, a, b, c) => n + "：全部完成 " + SA.fmt(s.make, 1) + " 分，平均任务耗时 " + SA.fmt(s.avg, 1) + " 分\n    统一回复 " + a + "  上下文连续 " + b + "  跟进生效 " + c;
+    SA.$("#d1-out").textContent =
+      row("① 单 Session", r.one.st, "✓", "✓", "✓") + "\n" +
+      row("② 每事件一个", r.many.st, "✗", "✗", "✗（原 Session 仍按旧方案）") + "\n" +
+      row("③ 双层架构", r.two.st, "✓", "✓", "✓") + "\n" +
+      "双层比单 Session 快 " + SA.fmt(r.one.st.make - r.two.st.make, 1) + " 分钟；比“每事件一个”慢 " + SA.fmt(r.two.st.make - r.many.st.make, 1) + " 分钟，但没有割裂和混乱。";
+  }
+  ["#d1-w", "#d1-g"].forEach((id) => SA.$(id).addEventListener("input", draw1));
+  draw1();
+
+  /* ---- 2. Router 批处理 ---- */
+  const DUR = 600, SHOW = 60;
+  const cost = { prefill: (b) => 1.72 + 0.78 * b, naive: (b) => 2.5 * b };
+  function sim(rate, mode) {
+    const r = SA.rng(11), arr = []; let t = 0; for (let w = 0; w < 50; w++) r(); // 预热：小种子的前几十个数不够随机
+    while (true) { t += -Math.log(1 - r()) * (60 / rate); if (t > DUR) break; arr.push(t); }
+    const segs = [], waits = [], batches = [], reqs = []; let now = 0, i = 0, maxQ = 0;
+    while (i < arr.length) {
+      if (arr[i] > now) now = arr[i];
+      let j = i; while (j < arr.length && arr[j] <= now) j++;
+      const b = j - i; maxQ = Math.max(maxQ, b);
+      const d = cost[mode](b), end = now + d;
+      segs.push({ t0: now, t1: end, cls: "c4", text: String(b), title: "合并 " + b + " 条，耗时 " + SA.fmt(d, 1) + " 秒" });
+      for (let k = i; k < j; k++) waits.push(end - arr[k]);
+      batches.push(b); reqs.push(d); now = end; i = j;
+    }
+    const avg = (a) => a.reduce((s, x) => s + x, 0) / Math.max(1, a.length);
+    return { arr, segs, avgB: avg(batches), avgT: avg(reqs), amort: avg(reqs) / avg(batches), avgW: avg(waits), p95W: SA.pctl(waits, 95), maxQ, n: arr.length };
+  }
+  function draw2() {
+    const rate = +SA.$("#d2-r").value, mode = SA.$("#d2-m").value;
+    SA.$("#d2-rv").textContent = rate;
+    const s = sim(rate, mode);
+    const show = (segs) => segs.filter((g) => g.t0 < SHOW).map((g) => Object.assign({}, g, { t1: Math.min(g.t1, SHOW) }));
+    SA.lanes("#d2-lanes", [
+      { name: "Trigger 到达", segs: s.arr.filter((x) => x < SHOW).map((x) => ({ t0: x, t1: x + 0.35, cls: "c2" })) },
+      { name: "Router", segs: show(s.segs) },
+    ], { t1: SHOW, unit: " 秒" });
+    SA.$("#d2-out").textContent =
+      "10 分钟内到达 " + s.n + " 条 Trigger（" + (mode === "prefill" ? "合并很便宜" : "每条全价") + "）\n" +
+      "平均 batch " + SA.fmt(s.avgB, 2) + " 条 · 单次请求 " + SA.fmt(s.avgT, 1) + " 秒 · 每条分摊 " + SA.fmt(s.amort, 2) + " 秒\n" +
+      "Trigger 从到达到被处理完：平均 " + SA.fmt(s.avgW, 1) + " 秒，p95 " + SA.fmt(s.p95W, 1) + " 秒；单轮最多合并 " + s.maxQ + " 条" +
+      (s.p95W > 30 ? "\n⚠ 等待时间越积越长：Router 跟不上到达速率了。" : "");
+  }
+  SA.$("#d2-r").addEventListener("input", draw2); SA.$("#d2-m").addEventListener("change", draw2);
+  draw2();
+});
+</script>
+</body>
+</html>

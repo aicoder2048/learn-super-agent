@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>事件过滤与路由 · SA03</title>
+<link rel="stylesheet" href="assets/sa-lesson.css">
+<script src="assets/glossary-data.js"></script>
+<script src="assets/sa-lib.js"></script>
+<style>
+  .pol { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px 16px; margin-bottom: 12px; font-size: 13.5px; }
+  .pol label { display: flex; justify-content: space-between; gap: 8px; align-items: center; color: var(--ink-2); }
+  .pol select { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+  .sem { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13.5px; color: var(--ink-2); margin: 4px 0 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+  .sem b { color: var(--brand); }
+  .msgs li .who { color: var(--ink-3); font-size: 12.5px; margin-right: 4px; }
+  .subs { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin: 12px 0 4px; }
+  .subs > div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface-2); font-size: 13px; }
+  .subs > div b { color: var(--brand); display: block; margin-bottom: 4px; }
+  .subs .pill { margin: 2px 4px 2px 0; }
+  .counter { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 14px; margin: 6px 0 10px; }
+  .counter b { font-family: var(--mono); font-size: 17px; color: var(--accent); }
+  #d2-log { max-height: 420px; overflow: auto; }
+</style>
+</head>
+<body>
+<header id="sa-topbar"></header>
+
+<div class="layout">
+<aside class="toc">
+  <h4>本课目录</h4>
+  <ol>
+    <li><a href="#s1">驱动方式变了：从提示词到 Trigger</a></li>
+    <li><a href="#s2">高噪音、低触发率</a></li>
+    <li><a href="#s3">两级过滤</a></li>
+    <li><a href="#s4">事件路由：订阅与直通</a></li>
+    <li><a href="#s5">直通值多少：实验数字</a></li>
+    <li><a href="#s6">自测与速记</a></li>
+  </ol>
+</aside>
+
+<main>
+<div class="hero">
+  <div class="kicker">SA03 · 核心架构</div>
+  <h1>事件驱动（上）：过滤与路由</h1>
+  <p>Super-agent 要“主动”，先得改变驱动方式：不再等人敲提示词，而是监听环境里的事件。可环境里绝大多数事件都是噪音。本课讲事件进门的头两关：怎样便宜地滤掉噪音，怎样把剩下的事件快速送到对的地方。</p>
+  <div class="meta"><span>原文：§3 开头、§3.1 事件过滤、§3.2 事件路由</span><span>阅读约 18 分钟</span><span>含 2 个互动演示、3 张原文图</span></div>
+</div>
+
+<div class="objectives">
+  <h4>学完本课，你能够：</h4>
+  <ul>
+    <li>说出什么是 <a class="term" href="glossary.html#trigger">Trigger</a>、什么是 <a class="term" href="glossary.html#thread">Thread</a>，以及事件生命周期的四个问题。</li>
+    <li>用 <a class="term" href="glossary.html#fast-slow-path">Fast Path / Slow Path</a> 解释<a class="term" href="glossary.html#two-level-filter">两级过滤</a>：程序层管什么，语义层管什么。</li>
+    <li>说清<a class="term" href="glossary.html#subscription">订阅与直通</a>怎样给 Router 减负，以及多对多订阅的作用。</li>
+    <li>引用原文实验说明直通的真实价值：省 Router 的决定和 token，而不是提速。</li>
+  </ul>
+</div>
+
+<!-- ============ 1 ============ -->
+<section class="lesson-sec" id="s1">
+  <h2><span class="num">01</span>驱动方式变了：从提示词到 Trigger</h2>
+  <p>先说结论：要让 Super-agent 具备“主动”性，首先要改变系统的驱动方式。</p>
+  <div class="vs">
+    <div><h4>单 Session 模式</h4><p>主要输入：人在 Session 里逐条键入的提示词。</p><p>人下指令，Agent 才被动执行一次。</p></div>
+    <div><h4>Super-agent</h4><p>主要输入：环境中的<b>半结构化事件</b>。</p><p>Agent 监听并响应这些事件，不必等人下指令。</p></div>
+  </div>
+  <p>原文把这些环境事件叫作 <b>Trigger</b>。例子有：群聊消息、邮件与日程提醒、代码审查评论、CI 运行结果。</p>
+  <p>围绕一条事件从进入到处理的生命周期，原文依次讨论四个递进的问题：</p>
+  <ol class="steps">
+    <li><b>过滤</b>：用程序与模型结合的两级策略，滤掉大量噪音。<span class="src-ref">3.1 · 本课</span></li>
+    <li><b>路由</b>：用订阅与直通机制，把事件送给 Worker。<span class="src-ref">3.2 · 本课</span></li>
+    <li><b>上下文组织</b>：用 Inline &amp; Spill 与链式召回，高密度注入、按需召回上下文。<span class="src-ref">3.3 · <a href="SA04-context-speculation.html">SA04</a></span></li>
+    <li><b>提前行动</b>：用投机执行，根据环境信号在后台先做。<span class="src-ref">3.4 · <a href="SA04-context-speculation.html#s4">SA04</a></span></li>
+  </ol>
+</section>
+
+<!-- ============ 2 ============ -->
+<section class="lesson-sec" id="s2">
+  <h2><span class="num">02</span>高噪音、低触发率</h2>
+  <p>接入真实的群聊和代码平台后，事件流有一个显著特征：<b>高噪音、低触发率</b>。绝大多数日常消息不需要 Agent 介入。</p>
+  <p>如果每个事件都调用大模型从头判断，延迟和算力成本都难以承受。</p>
+  <p>原文借用了计算机系统里的 <b>Fast Path / Slow Path</b> 思想：</p>
+  <div class="grid-2">
+    <div class="kp"><div class="k">Slow Path</div><div class="v">大模型推理</div><p>灵活，但成本高、延迟高。留给真正需要语义理解的情况。</p></div>
+    <div class="kp"><div class="k">Fast Path</div><div class="v">确定性代码</div><p>把已经明确、稳定的高频判断固化成代码。延迟低，成本低。</p></div>
+  </div>
+  <div class="callout note"><span class="ttl">补充：Fast / Slow Path 的出处</span>这个思路在网络设备和操作系统里很常见。例如路由器：绝大多数数据包按转发表由硬件直接转发（Fast Path），少数特殊包才交给 CPU 慢慢处理（Slow Path）。原则是：让常见情况快，让少见情况对。</div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="lesson-sec" id="s3">
+  <h2><span class="num">03</span>两级过滤</h2>
+  <p>事件进入系统后的第一步是过滤。目标是：在调用大模型之前，先用确定性策略筛掉噪音，只把需要语义理解的<a class="term" href="glossary.html#candidate-event">候选事件</a>交给模型。原文采用程序策略与大模型相结合的两级过滤：</p>
+  <div class="vs">
+    <div><h4>程序层策略 <span class="pill fast">Fast Path</span></h4><p>按确定性条件直接用代码做准入检查：事件来源、群组范围、用户或机器人白名单。</p><p>例如：对不同来源分别设置“仅响应明确请求”“作为候选事件”或“直接忽略”。</p><p>在调用模型前，滤掉大部分无关消息。</p></div>
+    <div><h4>语义层策略 <span class="pill slow">Slow Path</span></h4><p>通过程序层的候选事件交给 LLM。LLM 按“用提示词写的策略”和上下文，判断要不要行动。</p><p>它同时是<b>面向人的自然语言扩展点</b>：随时可以用提示词开关或新增策略。</p></div>
+  </div>
+  <figure class="fig"><img src="img/fig05.jpg" alt="两级过滤：先由程序层策略筛除大部分无关消息，再交由语义层策略判断"><figcaption><b>原文图 5</b>两级过滤：先由程序层策略筛除大部分无关消息，再交由语义层策略判断。</figcaption></figure>
+
+  <div class="chart-card" id="demo1">
+    <div class="chart-head">
+      <div class="chart-title">游乐场：配置两级过滤，看多少消息到了大模型</div>
+    </div>
+    <div class="demo" id="d1-demo">
+      <div class="pol" id="d1-pol"></div>
+      <div class="sem"><b>语义层策略（提示词）：</b>
+        <label><input type="checkbox" id="d1-fix" checked> 静默复现并修复（有人反馈问题或讨论改动方案）</label>
+        <label><input type="checkbox" id="d1-ci"> CI 失败时排查</label>
+        <label><input type="checkbox" id="d1-rv"> 代码评审意见自动跟进</label>
+      </div>
+      <div class="counter" id="d1-cnt"></div>
+      <ul class="msgs" id="d1-msgs"></ul>
+    </div>
+    <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
+    <div class="chart-foot">先看默认配置：闲聊群只认明确请求，机器人消息直接忽略，大部分噪音在程序层就被滤掉，不花一次模型调用。试着把“闲聊群”改成“作为候选事件”，看进入大模型的条数怎么涨；再关掉“静默复现并修复”，看同样的候选事件怎样变成“不行动”。<br><span class="data-note">消息是虚构的示例。来源、策略选项和“静默复现并修复”策略名取自原文；具体的判断由本页按简单规则模拟，真实系统里由 LLM 根据提示词判断。</span></div>
+  </div>
+  <div class="callout tip"><span class="ttl">两层的分工</span>程序层回答“这条消息有没有资格让模型看一眼”。语义层回答“看了之后，值不值得做”。前者便宜、死板、可审计；后者灵活、贵、可以用自然语言随时改。</div>
+  <div class="callout warn"><span class="ttl">注意明确请求</span>“仅响应明确请求”不等于“全部忽略”。设成这一档的来源，<a class="term" href="glossary.html#explicit-request">明确请求</a>（例如 @agent 帮我…）仍然能通过。</div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section class="lesson-sec" id="s4">
+  <h2><span class="num">04</span>事件路由：订阅与直通</h2>
+  <p>过滤之后，事件要送到对的会话。这里有一个隐患：第 2 节的全局 Router 层负责维持跨信道的连续性。如果<b>已分配任务的每个后续事件</b>仍要经过 Router 转发，这个全局节点依然会承受大量负载，系统响应延迟也会被推高。</p>
+  <p>所以 Fast / Slow Path 同样适用于路由。全局 Router 只负责两件事：<b>新任务的冷启动</b>，和<b>跨任务协调</b>。已经确定归属的后续事件，由程序直接发给对应的 Worker，不经过 Router。</p>
+
+  <h3>先认识 Thread</h3>
+  <p>在实际工作流中，同一个 GitHub Pull Request、同一个 IM 话题、同一封往来邮件串下的连续事件，构成一条事件流，原文叫 <b>Thread</b>。</p>
+  <figure class="fig"><img src="img/fig06.jpg" alt="Thread 示例：同一个 IM 话题或同一个 GitHub Pull Request 下的连续 Trigger 构成一条 Thread"><figcaption><b>原文图 6</b>Thread 示例：同一个 IM 话题或同一个 GitHub Pull Request 下的连续 Trigger，构成一条 Thread。</figcaption></figure>
+
+  <h3>两条路径</h3>
+  <p>Router 根据某个 Thread 的初始事件创建 Worker Session 后，这个 Worker 直接订阅对应的 Thread。事件路由于是分成两条路径：</p>
+  <div class="vs">
+    <div><h4>已订阅 <span class="pill fast">Fast Path</span></h4><p>同一 Thread 的后续事件，由程序直通已订阅的 Worker。Router 不需要再调用工具转发。</p><p>新事件超出当前任务范围时，Worker 可以取消订阅，或交回 Router 重新分派。</p></div>
+    <div><h4>未订阅 <span class="pill slow">Slow Path</span></h4><p>Router 仍能观测所有事件，掌握全局状态。</p><p>但它只负责判断和分派<b>尚未被订阅</b>的新事件。</p></div>
+  </div>
+  <figure class="fig"><img src="img/fig07.jpg" alt="订阅与直通：初始事件经由 Router 层创建 Worker 并建立订阅，同一 Thread 的后续事件直接发往该 Worker"><figcaption><b>原文图 7</b>订阅与直通：初始事件经由 Router 层创建 Worker 并建立订阅，同一 Thread 的后续事件直接发往该 Worker。</figcaption></figure>
+
+  <h3>订阅是多对多的</h3>
+  <p>一个 Worker 可以同时订阅多个相关 Thread。同一个 Thread 也可以被多个 Worker 订阅。多个 Worker 在同一个工作环境或讨论里发生交集时，这个 Thread 的新事件会同时直通给所有订阅者。它们不需要点对点通信，也有机会获知彼此的操作，自行解决冲突。</p>
+  <p>输出侧不变：Worker 仍把关键结论汇报给 Router，由 Router 统一回复用户，并同步全局记忆。</p>
+
+  <div class="chart-card" id="demo2">
+    <div class="chart-head">
+      <div class="chart-title">逐条播放：订阅与直通怎样给 Router 减负</div>
+      <label class="ctrl"><input type="checkbox" id="d2-pt" checked> 启用直通</label>
+      <div class="btn-row"><button class="btn" id="d2-next">下一条事件 ▸</button><button class="btn" id="d2-all">全部播放</button><button class="btn" id="d2-reset">重置</button></div>
+    </div>
+    <div class="demo" id="d2-demo">
+      <div class="counter" id="d2-cnt"></div>
+      <div class="subs" id="d2-subs"></div>
+      <ul class="msgs" id="d2-log"></ul>
+    </div>
+    <div class="chart-body" style="padding:0 16px"><div class="readout" id="d2-out"></div></div>
+    <div class="chart-foot">一条一条点“下一条事件”。注意三个时刻：①“日志贴在这里”这类后续事件直接走 Fast Path 到 W1；②W2 也订阅了 PR #101，于是 CI 失败的消息同时到了 W1 和 W2（多对多）；③“顺便改注册页”超出 W1 的任务范围，W1 把它交回 Router 重新分派。然后关掉“启用直通”再播一遍，比较 Router 要做的决定数。<br><span class="data-note">脚本是虚构的示例，用来演示原文 3.2 节的机制。Worker 自己打开 PR、订阅 Thread 是它的动作，不算 Trigger。</span></div>
+  </div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section class="lesson-sec" id="s5">
+  <h2><span class="num">05</span>直通值多少：实验数字</h2>
+  <p>原文 7.1 节的消融实验专门去掉了直通，结论很清楚：<b>直通不提速，但省 Router 的力气。</b></p>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>方案</th><th>任务完成时间 p50 / p95（分钟）</th><th>单次实验读缓存 token（全部 Session）</th></tr>
+    <tr><td>Super-agent</td><td>12.4 / 15.7</td><td>2323 万</td></tr>
+    <tr><td>Super-agent，去掉直通</td><td>12.6 / 15.5</td><td>3177 万</td></tr>
+  </table></div>
+  <ul>
+    <li>去掉直通后，任务完成时间与完整版<b>基本一致</b>。</li>
+    <li>单次实验里，Router 要做的决定<b>增加约 30%</b>。</li>
+    <li>总读缓存 token 从 2323 万增加到 3177 万，<b>增幅约 37%</b>。</li>
+  </ul>
+  <blockquote class="src">这表明在实验负载下，直通机制不提高任务完成质量与速度，但为 Router Session 节省了可观的 token 与推理开销。<cite>§7.1</cite></blockquote>
+  <div class="callout warn"><span class="ttl">读数字的限定</span>实验基于合成负载与简化环境（约 300 条消息、约 20 条工作请求，每种方案跑 5 次）。原文说结果“仅作为初步参考”。上面演示里的决定数增幅比 30% 大，是因为脚本里后续事件占比高；不要把演示数字当成实验结论。完整实验见 <a href="SA07-experiments.html">SA07</a>。</div>
+  <div class="callout note"><span class="ttl">补充：为什么不提速</span>原文 7.2 节的压测解释了这一点：Router 有批处理，峰值负载变大时也没触及单个 Router 的吞吐瓶颈（见 <a href="SA02-two-layer.html#s4">SA02</a>）。所以直通省下的是 Router 的推理和 token，而不是用户等待的时间。规模更大时，Router 离瓶颈更近，直通的意义可能更大——这是推论，原文没有测。</div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section class="lesson-sec" id="s6">
+  <h2><span class="num">06</span>自测与速记</h2>
+  <div class="quiz" data-answer="2">
+    <div class="q">两级过滤里，“对不同来源分别设置仅响应明确请求、作为候选事件或直接忽略”属于哪一层？</div>
+    <div class="opts"><button>语义层策略（Slow Path）</button><button>Router 层</button><button>程序层策略（Fast Path）</button><button>Watchdog</button></div>
+    <div class="explain">这是按来源做的确定性准入检查，用代码完成，属于程序层（Fast Path）。语义层由 LLM 按提示词写的策略做判断。</div>
+  </div>
+  <div class="quiz" data-answer="0">
+    <div class="q">原文为什么说语义层是“面向人类的自然语言扩展点”？</div>
+    <div class="opts"><button>因为它的策略用提示词编写，可以随时用自然语言开关或新增策略</button><button>因为它直接回复用户</button><button>因为它负责翻译多语言消息</button><button>因为它运行在用户本地</button></div>
+    <div class="explain">语义层策略是写在提示词里的。改行为不用改代码，用自然语言加一条、关一条就行，例如“静默复现并修复”。</div>
+  </div>
+  <div class="quiz" data-answer="3">
+    <div class="q">一个 Worker 正在处理某 PR，PR 下来了一条新评论，内容超出了它的任务范围。按原文，它可以怎么做？</div>
+    <div class="opts"><button>忽略这条评论</button><button>直接回复评论者</button><button>另开一个新的 Worker</button><button>取消订阅，或把事件交回 Router 重新分派</button></div>
+    <div class="explain">原文：若新事件超出了当前任务的范围，Worker 也可取消订阅或交回 Router 层重新分派。Worker 不直接对人说话，也不负责分派新任务。</div>
+  </div>
+  <div class="quiz" data-answer="1">
+    <div class="q">原文消融实验中，去掉直通机制带来的主要变化是？</div>
+    <div class="opts"><button>任务完成时间明显变长</button><button>完成时间基本不变，但 Router 决定增加约 30%，读缓存 token 增加约 37%</button><button>任务质量下降</button><button>Worker 之间开始互相通信</button></div>
+    <div class="explain">直通不提高完成质量与速度，但为 Router 节省了可观的 token 与推理开销：读缓存 token 从 2323 万增加到 3177 万。</div>
+  </div>
+
+  <h3>速记表</h3>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>要点</th><th>一句话</th></tr>
+    <tr><td>Trigger</td><td>驱动 Agent 的环境事件：群聊、邮件、日程、评审评论、CI 结果</td></tr>
+    <tr><td>生命周期</td><td>过滤 → 路由 → 上下文组织 → 提前行动</td></tr>
+    <tr><td>事件流特征</td><td>高噪音、低触发率；每条都问大模型太贵</td></tr>
+    <tr><td>两级过滤</td><td>程序层（Fast）按来源/群组/白名单准入；语义层（Slow）LLM 按提示词策略判断</td></tr>
+    <tr><td>Thread</td><td>同一 PR、同一 IM 话题、同一邮件串下的连续事件</td></tr>
+    <tr><td>订阅与直通</td><td>Worker 订阅 Thread；后续事件程序直通（Fast），未订阅的新事件归 Router（Slow）</td></tr>
+    <tr><td>多对多</td><td>多个 Worker 订阅同一 Thread，无需点对点通信就能看到彼此操作</td></tr>
+    <tr><td>直通的价值</td><td>完成时间基本不变；Router 决定 −约 30%，读缓存 token 3177 万 → 2323 万</td></tr>
+  </table></div>
+
+  <h3>相关课程</h3>
+  <div class="related">
+    <a href="SA02-two-layer.html"><small>上一课 · SA02</small>双层架构：Router 与 Worker</a>
+    <a href="SA04-context-speculation.html"><small>下一课 · SA04</small>事件驱动（下）：上下文组织与提前行动</a>
+    <a href="SA08-prototype.html"><small>SA08</small>开源原型里的过滤与接受模式</a>
+  </div>
+</section>
+
+<nav id="sa-pager" data-current="SA03-event-filter-route.html"></nav>
+<p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§3、§3.1、§3.2、§7.1（2026-10-31）。标为“补充”的内容和模拟演示是课程作者的解释，不是原文观点。</p>
+</main>
+</div>
+
+<script>
+SA.onReady(function () {
+  /* ---- 1. 两级过滤游乐场 ---- */
+  const SRC = {
+    internal: { name: "内部用户群", def: "candidate" },
+    public: { name: "公共反馈群", def: "candidate" },
+    chat: { name: "闲聊群", def: "explicit" },
+    github: { name: "GitHub 评论", def: "explicit" },
+    ci: { name: "CI 结果", def: "candidate" },
+    bot: { name: "机器人消息", def: "ignore" },
+  };
+  const POL = { explicit: "仅响应明确请求", candidate: "作为候选事件", ignore: "直接忽略" };
+  const MSG = [
+    { s: "chat", who: "小张", text: "今天食堂有红烧肉", kind: "noise" },
+    { s: "public", who: "用户", text: "升级到新版后 dsh login 一直报 401", kind: "bug" },
+    { s: "internal", who: "小李", text: "@agent 帮我把 README 的安装步骤更新一下", explicit: true },
+    { s: "bot", who: "部署机器人", text: "staging 部署成功", kind: "noise" },
+    { s: "github", who: "评审者", text: "这个函数名能不能改短一点？", kind: "review" },
+    { s: "ci", who: "CI", text: "main 分支 test-auth 失败", kind: "cifail" },
+    { s: "public", who: "用户", text: "谢谢，问题已经解决了", kind: "noise" },
+    { s: "internal", who: "小王", text: "超时时间是不是该改成 30 秒？大家怎么看", kind: "discuss" },
+    { s: "chat", who: "小赵", text: "周末有人去爬山吗", kind: "noise" },
+    { s: "github", who: "评审者", text: "@agent 请处理这轮代码审查意见", explicit: true },
+    { s: "bot", who: "依赖机器人", text: "Bump lodash from 4.17.20 to 4.17.21", kind: "noise" },
+    { s: "public", who: "用户", text: "Windows 上安装脚本找不到 python", kind: "bug" },
+    { s: "ci", who: "CI", text: "nightly 构建成功", kind: "noise" },
+    { s: "internal", who: "小李", text: "下午 3 点开周会", kind: "noise" },
+  ];
+  SA.$("#d1-pol").innerHTML = Object.keys(SRC).map((k) => '<label>' + SRC[k].name + ' <select data-src="' + k + '">' +
+    Object.keys(POL).map((p) => '<option value="' + p + '"' + (p === SRC[k].def ? " selected" : "") + ">" + POL[p] + "</option>").join("") + "</select></label>").join("");
+  function judge(m, pol, sem) {
+    const p = pol[m.s];
+    if (p === "ignore") return ["drop", "程序层：来源被忽略"];
+    if (m.explicit) return ["act", "明确请求 → LLM → 行动"];
+    if (p === "explicit") return ["drop", "程序层：非明确请求"];
+    if ((m.kind === "bug" || m.kind === "discuss") && sem.fix) return ["act", "LLM → 静默复现并修复"];
+    if (m.kind === "cifail" && sem.ci) return ["act", "LLM → 排查 CI 失败"];
+    if (m.kind === "review" && sem.rv) return ["act", "LLM → 跟进评审意见"];
+    return ["slow", "LLM 判断：不需要行动"];
+  }
+  function draw1() {
+    const pol = {}; SA.$$("#d1-pol select").forEach((s) => { pol[s.dataset.src] = s.value; });
+    const sem = { fix: SA.$("#d1-fix").checked, ci: SA.$("#d1-ci").checked, rv: SA.$("#d1-rv").checked };
+    let drop = 0, llm = 0, act = 0; const rows = [];
+    for (const m of MSG) {
+      const [cls, v] = judge(m, pol, sem);
+      if (cls === "drop") drop++; else llm++; if (cls === "act") act++;
+      rows.push('<li class="' + cls + '"><span class="src">' + SRC[m.s].name + '</span><span><span class="who">' + SA.esc(m.who) + "：</span>" + SA.esc(m.text) + '</span><span class="verdict">' + v + "</span></li>");
+    }
+    SA.$("#d1-msgs").innerHTML = rows.join("");
+    SA.$("#d1-cnt").innerHTML = "<span>消息 <b>" + MSG.length + "</b></span><span>程序层滤掉 <b>" + drop + "</b></span><span>交给大模型 <b>" + llm + "</b></span><span>最终行动 <b>" + act + "</b></span>";
+    SA.$("#d1-out").textContent = "共 " + MSG.length + " 条消息：程序层滤掉 " + drop + " 条（0 次模型调用），" + llm + " 条进入语义层（" + llm + " 次模型调用），其中 " + act + " 条触发行动。\n" +
+      "如果每条都交给大模型：" + MSG.length + " 次调用。两级过滤省掉了 " + SA.fmt((100 * drop) / MSG.length, 0) + "% 的调用。\n" +
+      "行动的消息里，" + MSG.filter((m) => m.explicit && pol[m.s] !== "ignore").length + " 条是明确请求，其余是语义层策略主动接下的。";
+  }
+  SA.$("#d1-demo").addEventListener("change", draw1);
+  draw1();
+
+  /* ---- 2. 订阅与直通 ---- */
+  const SCRIPT = [
+    { th: "IM·登录问题", text: "小王：登录测试挂了，@agent 看一下", init: "W1" },
+    { th: "IM·登录问题", text: "小王：日志贴在这里了" },
+    { sys: true, text: "W1 打开 PR #101（修复登录测试），并订阅它", sub: ["W1", "PR #101"] },
+    { th: "PR #101", text: "评审者：这里加一个回归测试" },
+    { th: "IM·活动摘要", text: "小李：@agent 加一个活动摘要功能", init: "W2" },
+    { th: "IM·活动摘要", text: "小李：放在侧栏就行" },
+    { sys: true, text: "W2 打开 PR #102（活动摘要），并订阅它", sub: ["W2", "PR #102"] },
+    { sys: true, text: "W2 发现要改 PR #101 里的同一个文件，也订阅 PR #101", sub: ["W2", "PR #101"] },
+    { th: "PR #101", text: "CI：PR #101 的 test-auth 失败" },
+    { th: "IM·登录问题", text: "小王：顺便把注册页的样式也改一下", outOfScope: "W1", newW: "W3" },
+    { th: "IM·午饭", text: "小张：今天午饭吃什么？" },
+    { th: "PR #102", text: "评审者：这个变量名改一下" },
+  ];
+  // 跑脚本到第 n 步，返回日志与计数
+  function play(n, pt) {
+    const subs = {}, log = []; let dec = 0, fast = 0, triggers = 0;
+    const subscribe = (w, th) => { (subs[w] = subs[w] || []); if (!subs[w].includes(th)) subs[w].push(th); };
+    const owners = (th) => Object.keys(subs).filter((w) => subs[w].includes(th));
+    for (let i = 0; i < n; i++) {
+      const e = SCRIPT[i];
+      if (e.sys) { subscribe(e.sub[0], e.sub[1]); log.push(["act", "动作", e.text, "建立订阅"]); continue; }
+      triggers++;
+      const own = owners(e.th);
+      if (pt && own.length) {
+        fast++;
+        if (e.outOfScope) { dec++; subscribe(e.newW, e.th); log.push(["slow", e.th, e.text, "直通 " + e.outOfScope + " → 超出范围，交回 Router → 新建 " + e.newW]); }
+        else log.push(["fast", e.th, e.text, "Fast Path 直通 → " + own.join("、") + "（Router 只旁观）"]);
+        continue;
+      }
+      dec++;
+      if (e.init) { subscribe(e.init, e.th); log.push(["slow", e.th, e.text, "Router 决定：新任务 → 创建 " + e.init + " 并订阅"]); }
+      else if (e.outOfScope) { subscribe(e.newW, e.th); log.push(["slow", e.th, e.text, "Router 决定：新任务 → 创建 " + e.newW]); }
+      else if (own.length) log.push(["slow", e.th, e.text, "Router 决定：转发给 " + own.join("、")]);
+      else log.push(["drop", e.th, e.text, "Router 决定：不属于任何任务，忽略"]);
+    }
+    return { subs, log, dec, fast, triggers };
+  }
+  let step = 0;
+  function draw2() {
+    const pt = SA.$("#d2-pt").checked, r = play(step, pt);
+    SA.$("#d2-log").innerHTML = r.log.map((x) => '<li class="' + x[0] + '"><span class="src">' + SA.esc(x[1]) + "</span><span>" + SA.esc(x[2]) + '</span><span class="verdict">' + SA.esc(x[3]) + "</span></li>").join("") || '<li class="drop"><span class="src">—</span><span>点“下一条事件”开始。</span><span class="verdict"></span></li>';
+    SA.$("#d2-log").scrollTop = 1e9; // 新事件总在底部可见
+    const ws = Object.keys(r.subs);
+    SA.$("#d2-subs").innerHTML = ws.length ? ws.map((w) => "<div><b>" + w + " 订阅</b>" + r.subs[w].map((t) => '<span class="pill' + (t.startsWith("PR") ? " hot" : " fast") + '">' + SA.esc(t) + "</span>").join("") + "</div>").join("") : "<div><b>订阅表</b>还没有 Worker。</div>";
+    SA.$("#d2-cnt").innerHTML = "<span>已播放 <b>" + step + "/" + SCRIPT.length + "</b></span><span>Trigger <b>" + r.triggers + "</b></span><span>Router 决定 <b>" + r.dec + "</b></span><span>直通 <b>" + r.fast + "</b></span>";
+    const on = play(SCRIPT.length, true), off = play(SCRIPT.length, false);
+    SA.$("#d2-out").textContent = "当前：直通" + (pt ? "开" : "关") + "，已播放 " + step + " 条，Router 做了 " + r.dec + " 个决定，" + r.fast + " 条走了 Fast Path。\n" +
+      "整段脚本对比：直通开 → Router 决定 " + on.dec + " 个；直通关 → " + off.dec + " 个（多 " + SA.fmt((100 * (off.dec - on.dec)) / on.dec, 0) + "%）。\n" +
+      "原文实验（约 300 条消息）：去掉直通，Router 决定约 +30%，读缓存 token +37%，完成时间基本不变。";
+  }
+  SA.$("#d2-next").addEventListener("click", () => { if (step < SCRIPT.length) step++; draw2(); });
+  SA.$("#d2-all").addEventListener("click", () => { step = SCRIPT.length; draw2(); });
+  SA.$("#d2-reset").addEventListener("click", () => { step = 0; draw2(); });
+  SA.$("#d2-pt").addEventListener("change", draw2);
+  draw2();
+});
+</script>
+</body>
+</html>

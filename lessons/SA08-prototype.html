@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>开源原型 dsh-superagent 拆解 · SA08</title>
+<link rel="stylesheet" href="assets/sa-lesson.css">
+<script src="assets/glossary-data.js"></script>
+<script src="assets/sa-lib.js"></script>
+<style>
+  .ctl-row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13.5px; color: var(--ink-2); margin-bottom: 12px; }
+  .ctl-row select { font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+  .msgs li .who { font-size: 12.5px; color: var(--ink-3); display: block; }
+  .msgs li .why { font-size: 12.5px; color: var(--ink-3); display: block; margin-top: 2px; }
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; }
+  .flow button { font: inherit; font-size: 13px; padding: 5px 11px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); cursor: pointer; }
+  .flow button.on { background: var(--brand); border-color: var(--brand); color: var(--surface); font-weight: 600; }
+  .flow button.past { border-color: var(--brand-2); color: var(--brand-2); }
+  .flow .arr { color: var(--ink-3); font-size: 12px; }
+  .stepcard { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 12px 16px; background: var(--surface); }
+  .stepcard h4 { margin: 0 0 4px; color: var(--brand); }
+  .stepcard .doc { font-size: 12.5px; color: var(--ink-3); }
+  .stepcard ul { margin: 6px 0 0; padding-left: 20px; }
+  td.y { color: var(--up); font-weight: 600; } td.p { color: var(--accent); font-weight: 600; } td.n { color: var(--ink-3); }
+</style>
+</head>
+<body>
+<header id="sa-topbar"></header>
+
+<div class="layout">
+<aside class="toc">
+  <h4>本课目录</h4>
+  <ol>
+    <li><a href="#s1">原型是什么，不是什么</a></li>
+    <li><a href="#s2">设计哲学：为注意力而设计</a></li>
+    <li><a href="#s3">领域模型与请求的一生</a></li>
+    <li><a href="#s4">授权：谁能下任务</a></li>
+    <li><a href="#s5">执行、交付与恢复</a></li>
+    <li><a href="#s6">提示词与监督面板</a></li>
+    <li><a href="#s7">与文章设计的对照</a></li>
+    <li><a href="#s8">安全提醒与安装</a></li>
+    <li><a href="#s9">自测与速记</a></li>
+  </ol>
+</aside>
+
+<main>
+<div class="hero">
+  <div class="kicker">SA08 · 验证与落地</div>
+  <h1>开源原型 dsh-superagent 拆解</h1>
+  <p>文章讲的是思路，原型是这条思路的一份公开代码。本课按原型自己的文档顺序，把它拆开看：它用哪些概念，怎样决定接不接活，怎样执行和交付，又和文章的设计差在哪里。</p>
+  <div class="meta"><span>来源：dsh-superagent-prototype 的 README、SETUP 与 docs/000–007</span><span>阅读约 25 分钟</span><span>含 2 个互动演示</span></div>
+</div>
+
+<div class="objectives">
+  <h4>学完本课，你能够：</h4>
+  <ul>
+    <li>说清原型的定位和边界：面向单个 GitHub 仓库的研究原型，不是正式产品。</li>
+    <li>按顺序讲出一个请求的一生：Source → Trigger → Thread → Eval → Ticket/Mandate → Assignment → Executor → Channel。</li>
+    <li>判断一条消息在 off / observe / auto 三种<a class="term" href="glossary.html#acceptance-mode">接受模式</a>下会被怎样处理。</li>
+    <li>解释“上下文不等于权限”：订阅送来的消息为什么不能扩大授权。</li>
+    <li>对照文章的五个模块，指出原型实现了哪些、简化了哪些、文档没有提到哪些。</li>
+  </ul>
+</div>
+
+<!-- ============ 1 ============ -->
+<section class="lesson-sec" id="s1">
+  <h2><span class="num">01</span>原型是什么，不是什么</h2>
+  <p>先说结论：<a class="term" href="glossary.html#dsh-superagent">dsh-superagent</a> 是一个<b>面向单个 GitHub 仓库的主动式编程 Agent</b>。它以扩展包（bundle）的形式运行在 <a class="term" href="glossary.html#dsh">DeepSeek Harness</a> 里，采用 MIT 许可。</p>
+  <div class="grid-2">
+    <div class="kp"><div class="k">它做什么</div><div class="v">接请求 → 开工单 → 交付</div><p>它监听 GitHub，可选监听飞书。被允许的人请它做事时，它开一个工作项，在独立的 Session 和目录里干活，然后在原来的对话里回复，例如提交一个 Pull Request。一个网页面板显示需要人处理的事。</p></div>
+    <div class="kp"><div class="k">它不是什么</div><div class="v">不是正式产品</div><p>README 第一段就声明：这是仅供参考的研究原型，不是 DeepSeek 的正式产品。代码可能有缺陷，风格可能不一致，用之前要审查和改造。</p></div>
+  </div>
+  <blockquote class="src">We have adapted it for publication, so it is not identical to our internal version or the implementation described in <i>Exploring Super-agent Design</i>. Some designs discussed in the article are directions for future development and are not implemented in this prototype.<cite>README</cite></blockquote>
+  <p>这句话的意思是：公开版经过改编，和团队内部版本不同，也和文章描述的实现不同。文章里的部分设计是未来方向，原型里没有。所以读这一课时，要分清三样东西：<b>文章的设计</b>、<b>原型文档写明的行为</b>、<b>我们推断的东西</b>。本课只讲前两样；没有文档支持的地方，会写“文档未提及”。</p>
+  <div class="callout note"><span class="ttl">补充：原型的文档怎么读</span>原型的文档按编号 000–008 排列。README 要求按顺序读：每篇只依赖前面已经介绍过的概念。本课的小节顺序也照这个来：000 哲学 → 001 领域模型 → 002 授权 → 003 执行 → 004 提示词 → 005 面板。</div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section class="lesson-sec" id="s2">
+  <h2><span class="num">02</span>设计哲学：为注意力而设计</h2>
+  <div class="callout rule"><span class="ttl">原型的核心原则（000-philosophy）</span>尽可能少地占用人的注意力，尽可能多地创造价值。</div>
+  <p>这条原则直接呼应文章的出发点。<a href="SA01-why-super-agent.html#s2">SA01</a> 讲过：多任务的上限取决于<a class="term" href="glossary.html#attention-bottleneck">人的注意力</a>。原型把这个判断变成了一条评审标准：每条消息、每次通知、每个问题、每个设置、面板上的每个元素、每段文档，都要占用某人的注意力。它给出的价值必须大于这份成本，否则就删掉。</p>
+  <p>由此，原型给 Agent 定下五条行为准则：</p>
+  <ol class="steps">
+    <li><b>只在被请求、或团队写的规则允许时才行动。</b>没人要的工作需要一条团队写的规则，而且先从“只记录不执行”的模式开始。</li>
+    <li><b>只在有人必须行动、或能用上结果时才说话。</b>接到请求确认一次，干活时保持安静，有结果、需要决定或做不完时再开口。</li>
+    <li><b>一次只问一个具体问题</b>，用结构化的方式问，免得问题埋在长报告里。</li>
+    <li><b>按影响决定停在哪里，而不是按工作量。</b>局部改动做到可审查为止；需要设计决定的改动，带着清楚的问题停下。</li>
+    <li><b>诚实汇报。</b>草稿标明未完成，失败就报失败，不绕过限制来避免提问。</li>
+  </ol>
+  <p>对设计本身，原型也有对应的要求：概念少、设置少、面板只显示需要人处理的东西、文档按顺序读。</p>
+  <div class="callout warn"><span class="ttl">运营者的责任</span>Agent 用团队每天都能看到的账号评论、提 PR、发消息。它发出的每条消息都消耗同事的注意力，责任在运营者。原型给了四条建议：<b>从窄处开始</b>（名单短，主动工作只记录）；<b>调低噪音</b>（Agent 太吵就把提示词改短、改严，或暂停它，不要再加消息解释噪音）；<b>不要用它刷量</b>；<b>为它说的话负责</b>。</div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="lesson-sec" id="s3">
+  <h2><span class="num">03</span>领域模型与请求的一生</h2>
+  <p>原型只用少数几个领域概念。代码、Agent 调用的工具、面板和文档都只用这些词。下表列出核心概念，并对照文章里的说法。</p>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>原型概念</th><th>定义（据 001-domain）</th><th>对应文章的说法</th></tr>
+    <tr><td><a class="term" href="glossary.html#proto-source">Source</a></td><td>一个事件流，如 GitHub、飞书。保存读取位置，重启不重放事件；丢掉机器人自己的消息</td><td>工作信道</td></tr>
+    <tr><td><a class="term" href="glossary.html#trigger">Trigger</a></td><td>一个不可变的事件，带 Source 给的元数据（如发送者）。同一 Trigger 被接受两次，只建一个 Ticket</td><td>Trigger</td></tr>
+    <tr><td><a class="term" href="glossary.html#thread">Thread</a></td><td>按时间排列的 Trigger；同一时间最多运行一个 Eval</td><td>Thread</td></tr>
+    <tr><td><a class="term" href="glossary.html#proto-eval">Eval</a></td><td>对一批 Trigger 的判断：gate（确定性准入）+ assessment（模型研判）→ Decision</td><td>两级过滤 + Router 的分派判断</td></tr>
+    <tr><td><a class="term" href="glossary.html#proto-mandate">Mandate</a></td><td>接单授予的权限：Policy 版本、范围、强度、匹配的规则、请求者身份。不可变</td><td>文章未单独命名</td></tr>
+    <tr><td><a class="term" href="glossary.html#proto-ticket">Ticket</a></td><td>一个已授权的工作单位，只有 Eval 能创建</td><td>一个任务</td></tr>
+    <tr><td>Assignment</td><td>Ticket 与一个 Executor 实例的绑定；一个 Ticket 可以先后有多个</td><td>分派</td></tr>
+    <tr><td><a class="term" href="glossary.html#proto-executor">Executor</a></td><td>每个 Ticket 一个执行器 Session（代码里叫 <code>worker</code>）和一个目录</td><td>Worker 层</td></tr>
+    <tr><td>主 Session</td><td>评估 Trigger、接单、分派并回复的 Session（代码里叫 <code>orchestrator</code>）</td><td>Router 层</td></tr>
+    <tr><td><a class="term" href="glossary.html#subscription">Subscription</a></td><td>Ticket 与 Thread 的多对多关系。匹配的 Trigger 扇出（fan-out）给每个订阅的活跃 Ticket</td><td>订阅与直通</td></tr>
+    <tr><td>Channel</td><td>Thread 的“写”的一面：确认、回复、PR 都是写</td><td>多信道交互的输出端</td></tr>
+  </table></div>
+  <p>原型还列出了它<b>拒绝</b>的概念，这些拒绝同样有启发。例如：它不设“追加到工单”这种 Decision，因为追加就是订阅扇出，不需要 Eval；它不让 Correlation（线程之间的关联）参与路由，路由只靠订阅，关联只补充上下文；它不把“人”建成一个实体，人只是 Trigger 上的元数据，跨平台的身份对应写进提示词。</p>
+
+  <div class="chart-card" id="demo2">
+    <div class="chart-head">
+      <div class="chart-title">逐步看：一个请求的一生</div>
+      <button class="btn" id="d2-prev" type="button">← 上一步</button>
+      <button class="btn" id="d2-next" type="button">下一步 →</button>
+    </div>
+    <div class="demo" id="d2-demo">
+      <div class="flow" id="d2-flow"></div>
+      <div class="stepcard" id="d2-card"></div>
+    </div>
+    <div class="chart-foot" id="d2-foot">场景：仓库成员 alice 在一个 Issue 下评论 <code>@agent 请排查登录测试失败的原因</code>。点上面的步骤，或用“上一步 / 下一步”。每一步的说明都摘自原型文档 001-domain、002-authorization 与 003-execution。</div>
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section class="lesson-sec" id="s4">
+  <h2><span class="num">04</span>授权：谁能下任务</h2>
+  <p>先说结论：原型里，<b>权限由宿主代码强制执行，不由消息内容决定</b>。名单、规则和 Mandate 都由宿主检查。消息、评论和被引用的文档只是判断的输入，改不了这些权限。</p>
+  <h3>一条 Trigger 的两条路</h3>
+  <div class="vs">
+    <div><h4>路径一：Eval（决定要不要开新工作）</h4><p>Source 先标记这条消息有没有找 Agent：<code>mention</code> 表示 @ 了 Agent，<code>direct</code> 表示私信。然后 gate 按发送者和这个 Source 的 Policy 检查：</p><ul><li>名单内的人找 Agent → 明确请求（explicit）。</li><li>其他人的消息 → 查<a class="term" href="glossary.html#proto-admission">准入表</a>。</li><li>机器人名单里的机器人 → 最多是推断候选，永远不是明确请求。其他机器人不准入。</li></ul></div>
+    <div><h4>路径二：订阅（继续已有的工作）</h4><p>被订阅的 Thread 上的每条消息，包括机器人和 CI 的消息，都作为上下文送到订阅它的 Ticket。<span class="good">这条路绕过 gate</span>，<span class="bad">也不授予任何新权限</span>。每个 Ticket 仍受自己的 Mandate 限制。</p><p>人在 Ticket 自己的 Thread 上的跟进，由这个 Ticket 的执行器决定：范围内就处理，超出范围或属于别的 Ticket 就交回，重新走 Eval。</p></div>
+  </div>
+  <div class="callout rule"><span class="ttl">上下文不等于权限</span>订阅的对话为任务提供信息，但不扩大任务的授权范围。要做更大范围的事，需要一次新的接单，生成新的 Ticket 和 Mandate。</div>
+  <h3>接受模式与规则</h3>
+  <p>接受模式只管<b>推断出的工作</b>，属于 Policy 的一部分：</p>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>模式</th><th>效果（据 002-authorization）</th></tr>
+    <tr><td><code>off</code></td><td>任何推断都不成为候选：没 @ 的消息、机器人的消息、名单外的人的跟进</td></tr>
+    <tr><td><code>observe</code>（默认）</td><td>推断候选会被研判；研判为正面时，记为 ignore 并标记“本会接受”（would accept），不真正接单</td></tr>
+    <tr><td><code>auto</code></td><td>推断候选研判为正面，就接单。主动接单至少要匹配一条已启用的规则</td></tr>
+  </table></div>
+  <p>明确请求在三种模式下都有效。文档建议：先用 observe，看过记录下来的 Decision，再切到 auto。每条规则描述一种主动工作；Ticket 的 Mandate 记下匹配的规则，执行器会收到规则的名字和指令。</p>
+
+  <div class="chart-card" id="demo1">
+    <div class="chart-head">
+      <div class="chart-title">模拟：同一串消息，在不同模式下怎样处理</div>
+    </div>
+    <div class="demo" id="d1-demo">
+      <div class="ctl-row">
+        <label>接受模式 <select id="d1-mode"><option value="off">off</option><option value="observe" selected>observe（默认）</option><option value="auto">auto</option></select></label>
+        <label><input type="checkbox" id="d1-r1" checked> 规则 R1：群里有人报告可复现的缺陷 → 静默复现并修复</label>
+        <label><input type="checkbox" id="d1-r2"> 规则 R2：依赖升级 PR → 跟进并修复 CI</label>
+        <label>准入表“名单外、@ 了 Agent” <select id="d1-cell"><option value="ignore" selected>ignore（默认）</option><option value="inferred">inferred</option><option value="explicit">explicit</option></select></label>
+      </div>
+      <ul class="msgs" id="d1-list"></ul>
+    </div>
+    <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
+    <div class="chart-foot">切换模式和规则，看哪些消息会变成工单。重点看三条：第 3 条（名单内的人没 @，推断）、第 4 条（机器人名单里的机器人，推断）、第 7 条（订阅线程里名单外的人追加要求）。<br><span class="data-note">名单：alice、bob 在允许名单内；dependabot[bot] 在机器人名单内。假设这个群设为“全部消息”。规则以 002-authorization 为准；消息和规则内容是为演示编的例子，研判结果按“消息是否落在规则描述的范围内”简化处理。</span></div>
+  </div>
+
+  <div class="callout tip"><span class="ttl">Policy 改了，进行中的工单怎么办</span>规则、接受模式和各 Source 的名单、准入表一起组成 <a class="term" href="glossary.html#proto-policy-version">Policy 版本</a>，每个 Mandate 都记下它。版本变化时，正在运行的 Eval 被丢弃并重新排队；受影响的活跃 Ticket 收到一条通知，但不会被立刻取消，因为取消会留下做了一半的工作。已结束的 Ticket 要恢复时，会按当前 Policy 重新校验 Mandate，校验不过就不能恢复。</div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section class="lesson-sec" id="s5">
+  <h2><span class="num">05</span>执行、交付与恢复</h2>
+  <p>接单之后，工作交给执行器。下面按 003-execution 的顺序讲要点。</p>
+  <div class="grid-2">
+    <div class="kp"><div class="k">每个 Ticket 一套</div><div class="v">Session + 目录</div><p>执行器 Session 叫 <code>worker-&lt;ticket id&gt;</code>，目录以 Ticket 的短名命名。第一次派工前，准备命令（prepare command）运行一次，最多 10 分钟，典型做法是用 <code>git worktree</code> 建一份检出。</p></div>
+    <div class="kp"><div class="k">不阻塞</div><div class="v">5 秒转后台</div><p>执行器的预设把前台 shell 命令在 5 秒后转为后台任务。这样它在下一步就能收到新消息，而不用等长命令跑完。后台任务完成后，结果会唤醒执行器。每轮之后，后台工作最多再跑 30 分钟。</p></div>
+    <div class="kp"><div class="k">并发</div><div class="v">工位（slot）+ 1 个人的专用位</div><p>并发上限按工位计。额外留一个工位给人的消息或状态查询，所以新工作不会挡住人继续推进已有的 Ticket。CI 结果等其他输入要等普通工位。</p></div>
+    <div class="kp"><div class="k">汇报</div><div class="v">结构化的 Report</div><p>Report 有六种：progress、waiting、ready、blocked、failed、dropped。面板按它算出 Ticket 在等谁：等人回答、等人审查、受阻、排队、工作中……</p></div>
+  </div>
+  <h3>交付与合并</h3>
+  <p>结果回到原来的对话。聊天消息默认一句话，硬上限 100 词。GitHub 消息以一行声明开头，默认是 <code>This is by an automated agent, not a human</code>。</p>
+  <p>合并的默认做法很保守：执行器从不以 Agent 账号开启自动合并，因为 GitHub 会把合并记在开启的人名下。默认指令只允许这样的自动合并：PR 是为这个 Ticket 开的、已就绪、所需审批覆盖最新提交、增删合计少于 200 行，而且要用另一个账号的 CLI。否则由人来合并。</p>
+  <h3>失败与恢复</h3>
+  <ul>
+    <li><b>临时故障先重试。</b>模型服务或网络的临时错误（HTTP 408、429、5xx，连接被拒、重置或超时）会按递增的间隔重试三次。</li>
+    <li><b>先存再做。</b>接单之后的每个动作，例如转发候选、派工、投递输入，都先存下来再执行。失败的投递从 2 秒开始退避重试，间隔翻倍，最长 1 分钟。</li>
+    <li><b>重启后带恢复说明。</b>重启时正在运行的派工以“host restarted”结束，新派工带一条恢复说明：先检查目录、git 历史和 GitHub，再决定是否重复任何对外操作。</li>
+    <li><b>人的暂停一直有效。</b>人设置的暂停跨越跟进、新 Session 和重启，直到人解除。自动反馈从不恢复被暂停的工作。</li>
+  </ul>
+  <div class="callout note"><span class="ttl">补充：对照文章</span>“5 秒转后台、完成后唤醒”在效果上接近文章 §4.1 的<a class="term" href="glossary.html#async-react">异步 ReAct Loop</a>：前台不被耗时命令卡住。但文档描述的是“shell 命令自动转后台任务”，没有使用文章里 <code>start()</code> / <code>stop()</code> 的说法。两者是否同一套机制，文档未提及。</div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section class="lesson-sec" id="s6">
+  <h2><span class="num">06</span>提示词与监督面板</h2>
+  <h3>团队能写什么</h3>
+  <p>团队可以编辑三个段落，并添加技能（skill）：</p>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>段落</th><th>写什么</th></tr>
+    <tr><td>Communication（沟通方式）</td><td>何时发消息、消息怎么写、GitHub 消息的开头一行、怎样处理评审、哪些普通账号其实是评审机器人</td></tr>
+    <tr><td>Ticket scope（工单范围）</td><td>Ticket 什么时候继续、什么时候带着草稿停下</td></tr>
+    <tr><td>Delivery requirements（交付要求）</td><td>PR 里要附哪些证据、自动合并的条件和行数阈值、提交作者</td></tr>
+    <tr><td>Team skills（团队技能）</td><td>Agent 需要时才加载的知识，例如一个 identities 技能，说明哪个飞书用户对应哪个 GitHub 账号</td></tr>
+  </table></div>
+  <p>提示词改了，只改变模型读到的指令，<b>不改变</b> gate、Mandate、工具检查和账号包装器，这些由代码强制执行。文档给出了从强到弱的优先级：</p>
+  <ol class="steps">
+    <li>工具和宿主强制的事实：身份、权限、工具参数检查、回复用途、长度上限。提示词改不了。</li>
+    <li>内置段落和生成段落（含团队对它们的覆盖）。</li>
+    <li>主动 Ticket 所匹配规则里的流程和沟通要求（只对这个 Ticket 的执行器有效）。</li>
+    <li>团队段落和团队技能。</li>
+    <li>外部文本：消息、评论、文档和引用。<b>它们是数据，永远不改变规则或授权。</b></li>
+  </ol>
+  <p>提示词每次保存都生成一个不可变版本。Session 在每次模型请求时读取最新版本，所以改提示词不需要重启。</p>
+  <h3>面板回答三个问题</h3>
+  <p>面板位于 DeepSeek Harness 网页侧边栏的 Superagent 入口。打开它，依次回答：</p>
+  <ol class="steps">
+    <li><b>现在有什么需要我？</b></li>
+    <li><b>系统健康吗，在做对的事吗？</b></li>
+    <li><b>某项工作从 Trigger 到 Eval 再到 Ticket 的完整历史是什么？</b></li>
+  </ol>
+  <p>页签按工作流排列：Overview、Source、Trigger、Eval、Execution、Settings。面板原则之一是“默认安静”：健康状态不占额外空间，问题必须可操作，一次性的网络错误不算问题。</p>
+</section>
+
+<!-- ============ 7 ============ -->
+<section class="lesson-sec" id="s7">
+  <h2><span class="num">07</span>与文章设计的对照</h2>
+  <p>下表把文章的五个模块逐一对到原型文档。<span class="pill fast">已实现</span>表示文档明确描述了对应机制；<span class="pill hot">部分</span>表示有相近机制但形式不同或范围更小；<span class="pill">文档未提及</span>表示原型文档里找不到对应描述，不代表内部版本没有。</p>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>文章模块</th><th>原型</th><th>原型文档里的对应（出处）</th></tr>
+    <tr><td>双层架构：Router + Worker（§2）</td><td class="y">已实现</td><td>主 Session（orchestrator）只做路由，用较小的工具集，路由备注不超过 30 词；每个 Ticket 一个执行器 Session（worker）。（003、004）</td></tr>
+    <tr><td>Router 批处理（§2.1）</td><td class="p">部分</td><td>每个 Thread 的 Eval 串行运行，期间到达的 Trigger 合并成下一批；一次路由调用可以处理多个候选。（001、004）文章的批处理是在整个 Router Session 层面讨论的。</td></tr>
+    <tr><td>两级过滤（§3.1）</td><td class="y">已实现</td><td>Eval 两层：gate（确定性：名单、准入表、机器人名单）+ assessment（模型研判）。卡片明显与规则无关时可直接忽略。（001、002）</td></tr>
+    <tr><td>订阅与直通（§3.2）</td><td class="y">已实现</td><td>Subscription 多对多；匹配的 Trigger 扇出给订阅的 Ticket，不经 Eval；执行器可交回超出范围的消息。（001、002）</td></tr>
+    <tr><td>Inline &amp; Spill 与链式召回（§3.3）</td><td class="p">部分</td><td>派工和消息以 Trigger 卡片内联送达，只有被截断的内容才附资源指针；Trigger 正文最多 4,000 字符；<code>ticket/&lt;id&gt;</code> 等读取资源会带上相关 id。（004、007）文档没有使用“链式召回”这个说法。</td></tr>
+    <tr><td>投机执行（§3.4）</td><td class="p">部分</td><td>推断工作由团队规则 + 接受模式控制；规则可以要求静默（不发确认）；执行器发现无事可做时报告 dropped，默认不发消息结束。（002、003）</td></tr>
+    <tr><td>异步 ReAct Loop（§4.1）</td><td class="p">部分</td><td>前台 shell 命令 5 秒后转后台，完成后唤醒执行器；主 Session 有守卫，拒绝 sleep 和长等待。（003、004、007）</td></tr>
+    <tr><td>多信道交互（§4.2）</td><td class="y">已实现</td><td>GitHub + 可选飞书；聊天消息默认一句话，硬上限 100 词；GitHub 走结构化的 PR 与评论。（004）</td></tr>
+    <tr><td>计算与状态分离（§5.1）</td><td class="p">部分</td><td>状态存在一个 SQLite 文件里，Session、目录、订阅和待投递消息能跨重启保留。（003、007）但它作为一个本机进程运行，面板在 127.0.0.1；云端无状态计算容器，文档未提及。</td></tr>
+    <tr><td>计算与执行环境分离、端侧 daemon、BYOM（§5.2）</td><td class="n">文档未提及</td><td>执行器在本机的执行根目录下工作。（003、006）</td></tr>
+    <tr><td>Watchdog（§6）</td><td class="p">部分</td><td>没有名为 Watchdog 的 Session。部署文档建议在运营者自己的 DeepSeek Harness 配置里建一个每小时运行的检查任务：看状态，必要时重启，并报告错误。（006）由模型判断 Worker 是否有实质进展，文档未提及。</td></tr>
+  </table></div>
+  <div class="callout warn"><span class="ttl">不要过度解读这张表</span>“文档未提及”只说明公开原型的文档里没有。README 已说明：原型与内部版本、与文章描述的实现都不相同，部分设计是未来方向。</div>
+</section>
+
+<!-- ============ 8 ============ -->
+<section class="lesson-sec" id="s8">
+  <h2><span class="num">08</span>安全提醒与安装</h2>
+  <div class="callout warn"><span class="ttl">独立目录不是沙箱</span>执行器 Session 以<b>操作者的系统用户</b>身份运行命令，无需审批。两个预设都以 <code>danger-full-access</code> 运行，并读取被订阅 Thread 里的消息。账号包装器（<code>gh</code>、<code>lark-cli</code> 的包装）只是默认选择 Agent 的凭据，<b>不隔离进程</b>：worker 可以按绝对路径执行程序，也能读取操作者的 home 目录。文档的建议是：要隔离，就用一个只放 Agent 凭据的专用系统账号。</div>
+  <p>原型的架构文档在“开放问题”里也列了一条：Trigger 的哪些字段可信（例如 Source 给的发送者、Thread 归属），哪些不可信（例如正文和引用）。这和文章 §8.4 的安全问题是同一类，见 <a href="SA09-open-problems.html#s5">SA09</a>。</p>
+  <h3>引导式安装</h3>
+  <p>安装步骤很多，所以原型让一个编程 Agent 陪你装。你只需要对它说：</p>
+  <div class="readout">Read SETUP.md in this repository and set up dsh-superagent with me.</div>
+  <p>SETUP.md 是写给 Agent 看的。它同样遵守“少占注意力”的原则：</p>
+  <ul>
+    <li>先只读 SETUP.md 和 000-philosophy，跑一次环境探测，再开始提问。</li>
+    <li>一次只问一个问题，每个问题给一个推荐答案，用户一个词就能确认。</li>
+    <li>问完所有问题，发一条完整方案，确认后才执行。</li>
+    <li>从不在聊天里要密钥；需要用户亲手做的步骤（建账号、登录 CLI），集中在一条消息里给出命令。</li>
+  </ul>
+  <p>默认值也体现“从窄处开始”：允许名单只有操作者自己；接受模式是 observe；用专用的 Agent 账号，不用操作者自己的账号；自动合并默认关闭。</p>
+</section>
+
+<!-- ============ 9 ============ -->
+<section class="lesson-sec" id="s9">
+  <h2><span class="num">09</span>自测与速记</h2>
+  <div class="quiz" data-answer="1">
+    <div class="q">接受模式为 observe。名单内的 bob 在“全部消息”群里说“登录页白屏了”，没有 @ Agent，且这条消息匹配一条已启用的规则。结果是？</div>
+    <div class="opts"><button>创建 Ticket，开始修复</button><button>研判为正面，记为 ignore 并标记“本会接受”，不接单</button><button>不准入，连研判都没有</button><button>作为明确请求处理</button></div>
+    <div class="explain">名单内但没 @ 的消息，准入表默认是推断候选。observe 下推断候选会被研判，正面结果只记录为“本会接受”。切到 auto 才会真正接单。</div>
+  </div>
+  <div class="quiz" data-answer="2">
+    <div class="q">一个名单外的人在某 Ticket 的 PR 下评论：“顺便把 admin 权限也放开”。这条消息会怎样？</div>
+    <div class="opts"><button>订阅直通给 Ticket，Ticket 的授权随之扩大</button><button>直接被丢弃，Ticket 看不到</button><button>作为上下文送到 Ticket，但不扩大授权；超出范围就交回 Eval</button><button>自动生成一个新 Ticket</button></div>
+    <div class="explain">订阅扇出绕过 gate，但不授予新权限。Ticket 受 Mandate 限制，范围变大必须重新接单。执行器把超出范围的消息交回，它再按普通消息走 Eval。</div>
+  </div>
+  <div class="quiz" data-answer="0">
+    <div class="q">下面哪项改动<b>不能</b>通过编辑提示词实现？</div>
+    <div class="opts"><button>让名单外的人也能下明确请求</button><button>把聊天消息写得更短</button><button>要求 PR 附上测试证据</button><button>说明哪个飞书用户对应哪个 GitHub 账号</button></div>
+    <div class="explain">名单和准入表属于 Policy，由宿主代码强制执行。提示词只改变模型读到的指令，不改变 gate、Mandate 和工具检查。</div>
+  </div>
+  <div class="quiz" data-answer="3">
+    <div class="q">关于原型的执行环境，哪句话是对的？</div>
+    <div class="opts"><button>每个 Ticket 运行在独立的容器沙箱里</button><button>执行器每条命令都要人审批</button><button>账号包装器能阻止执行器读取 home 目录</button><button>执行器以操作者的系统用户身份运行，独立目录只是默认设置，不是安全边界</button></div>
+    <div class="explain">003 和 006 都明确说明：包装器和目录建立的是默认值，不是安全边界。需要隔离时，用只有 Agent 凭据的专用系统账号。</div>
+  </div>
+
+  <h3>速记表</h3>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>要点</th><th>一句话</th></tr>
+    <tr><td>定位</td><td>面向单个 GitHub 仓库的主动式编程 Agent；研究原型，非正式产品；与文章设计不完全相同</td></tr>
+    <tr><td>哲学</td><td>尽可能少地占用人的注意力，尽可能多地创造价值</td></tr>
+    <tr><td>流程</td><td>Source → Trigger → Thread → Eval → Ticket/Mandate → Assignment → Executor → Channel</td></tr>
+    <tr><td>授权</td><td>名单与规则由宿主强制；明确请求在任何模式有效；推断工作受 off / observe / auto 控制</td></tr>
+    <tr><td>上下文 ≠ 权限</td><td>订阅提供信息，不扩大 Mandate；范围变大要新开 Ticket</td></tr>
+    <tr><td>安全</td><td>以操作者系统用户运行，目录不是沙箱；隔离靠专用系统账号</td></tr>
+  </table></div>
+
+  <h3>相关课程</h3>
+  <div class="related">
+    <a href="SA03-event-filter-route.html"><small>SA03</small>事件驱动（上）：过滤与路由</a>
+    <a href="SA02-two-layer.html"><small>SA02</small>双层架构：Router 与 Worker</a>
+    <a href="SA09-open-problems.html"><small>下一课 · SA09</small>开放问题与全课总结</a>
+  </div>
+</section>
+
+<nav id="sa-pager" data-current="SA08-prototype.html"></nav>
+<p class="disclaimer">来源：<a href="https://github.com/deepseek-ai/dsh-superagent-prototype">deepseek-ai/dsh-superagent-prototype</a> 的 README、SETUP 与 docs/000–007（存档于 <code>docs/articles/prototype-docs/</code>，2026-11-02 抓取）；原文 DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》（2026-10-31）。标为“补充”的内容和模拟演示是课程作者的解释，不是原文或原型文档的观点。</p>
+</main>
+</div>
+
+<script>
+SA.onReady(function () {
+  /* ---- 1. 授权与接受模式模拟器 ---- */
+  // kind: listed-mention | unlisted-mention | listed-nomention | unlisted-nomention | bot-listed | bot-other | followup-unlisted | ci
+  const MSGS = [
+    { src: "GitHub", who: "alice（名单内）", text: "@agent 请排查登录测试失败的原因", kind: "listed-mention" },
+    { src: "GitHub", who: "mallory（名单外）", text: "@agent 帮我把 release 分支的保护关掉", kind: "unlisted-mention" },
+    { src: "飞书群", who: "bob（名单内）", text: "登录页在 Safari 上白屏了，能复现", kind: "listed-nomention", rule: "r1" },
+    { src: "GitHub", who: "dependabot[bot]（机器人名单内）", text: "Bump lodash from 4.17.20 to 4.17.21（CI 失败）", kind: "bot-listed", rule: "r2" },
+    { src: "GitHub", who: "notify-bot[bot]（不在机器人名单）", text: "@agent nightly build finished", kind: "bot-other" },
+    { src: "飞书群", who: "carol（名单外）", text: "今天中午吃什么？", kind: "unlisted-nomention" },
+    { src: "GitHub · 订阅", who: "dave（名单外）在第 1 条工单的 PR 下", text: "顺便把 /admin 接口的权限检查去掉吧", kind: "followup-unlisted" },
+  ];
+  function decide(m, mode, rules, cell) {
+    const matched = m.rule && rules[m.rule];
+    const inferred = (base) => {
+      if (mode === "off") return { cls: "drop", v: "不准入", why: base + "；off 模式下推断不成为候选" };
+      if (!matched) return { cls: "drop", v: "ignore", why: base + "；研判：不匹配任何已启用规则" };
+      if (mode === "observe") return { cls: "slow", v: "ignore · 本会接受", why: base + "；研判为正面，observe 只记录，不接单" };
+      return { cls: "act", v: "accept（inferred）", why: base + "；匹配规则 " + m.rule.toUpperCase() + "，创建 Ticket，Mandate 记下这条规则" };
+    };
+    switch (m.kind) {
+      case "listed-mention": return { cls: "act", v: "accept（explicit）", why: "名单内的人 @ 了 Agent → 明确请求，任何模式下都有效" };
+      case "unlisted-mention":
+        if (cell === "explicit") return { cls: "act", v: "accept（explicit）", why: "准入表把“名单外、@ 了”设为 explicit：这个范围里任何人都能下任务（适合专门的支持群）" };
+        if (cell === "inferred") return inferred("准入表把“名单外、@ 了”设为 inferred");
+        return { cls: "drop", v: "不准入", why: "准入表“名单外、@ 了”默认 ignore" };
+      case "listed-nomention": return inferred("名单内、没 @：准入表默认 inferred");
+      case "bot-listed": return inferred("机器人名单内的机器人：最多是推断候选，永远不是明确请求");
+      case "bot-other": return { cls: "drop", v: "不准入", why: "不在机器人名单里的机器人不准入" };
+      case "unlisted-nomention": return { cls: "drop", v: "不准入", why: "名单外、没 @：准入表默认 ignore" };
+      case "followup-unlisted": {
+        const first = "订阅扇出：作为上下文送到第 1 条的 Ticket，不经 gate，也不扩大授权。执行器判断超出范围，交回";
+        if (mode === "off") return { cls: "fast", v: "送达 Ticket · 交回后不准入", why: first + "；名单外的人的跟进是推断，off 下不准入" };
+        return { cls: "fast", v: "送达 Ticket · 交回后 ignore", why: first + "；重新走 Eval：名单外跟进算推断，研判不匹配任何规则" };
+      }
+    }
+  }
+  function draw1() {
+    const mode = SA.$("#d1-mode").value, cell = SA.$("#d1-cell").value;
+    const rules = { r1: SA.$("#d1-r1").checked, r2: SA.$("#d1-r2").checked };
+    let n = { act: 0, slow: 0, drop: 0, fast: 0 }, lines = [];
+    // 第 7 条只有在第 1 条接单后才存在订阅；第 1 条在任何模式都接单
+    SA.$("#d1-list").innerHTML = MSGS.map((m, i) => {
+      const d = decide(m, mode, rules, cell); n[d.cls]++;
+      lines.push((i + 1) + ". " + m.who + "「" + m.text + "」→ " + d.v);
+      return '<li class="' + d.cls + '"><span class="src">' + (i + 1) + " · " + SA.esc(m.src) + '</span><span><span class="who">' + SA.esc(m.who) + "</span>" + SA.esc(m.text) + '<span class="why">' + SA.esc(d.why) + '</span></span><span class="verdict">' + SA.esc(d.v) + "</span></li>";
+    }).join("");
+    SA.$("#d1-out").textContent = "模式 " + mode + "，规则 R1 " + (rules.r1 ? "启用" : "停用") + "、R2 " + (rules.r2 ? "启用" : "停用") + "，名单外 @ 单元格 = " + cell + "\n" +
+      "接单 " + n.act + " 条；只记录“本会接受” " + n.slow + " 条；不准入或忽略 " + n.drop + " 条；订阅送达但不扩权 " + n.fast + " 条\n" + lines.join("\n");
+  }
+  ["#d1-mode", "#d1-cell", "#d1-r1", "#d1-r2"].forEach((id) => SA.$(id).addEventListener("change", draw1));
+  draw1();
+
+  /* ---- 2. 一个请求的一生 ---- */
+  const STEPS = [
+    { k: "Source", t: "Source 读到事件", doc: "001-domain", pts: [
+      "GitHub Source 从通知里读到 alice 的评论。它保存读取位置，所以重启不会重放事件。",
+      "它在事件进入领域之前，丢掉机器人自己的消息和不在监听范围内的事件。",
+      "它把事件翻译成 Trigger，并给出所属的 Thread 和回复用的 Channel 地址。"] },
+    { k: "Trigger", t: "生成一个 Trigger", doc: "001-domain · 002-authorization", pts: [
+      "Trigger 不可变，带着 Source 给的元数据，例如发送者是 alice。",
+      "Source 标记它是否在找 Agent：这里是 mention（@ 了 Agent）。",
+      "同一个 Trigger 被接受两次，只会创建一个 Ticket：它是审计和幂等的单位。"] },
+    { k: "Thread", t: "进入 Thread，排队成批", doc: "001-domain", pts: [
+      "这个 Issue 就是一个 Thread。一个 Thread 同一时间最多运行一个 Eval。",
+      "Eval 运行期间到达的 Trigger，会合并进下一批。",
+      "如果这个 Thread 已经被某个 Ticket 订阅，人的消息会先走订阅扇出，由那个 Ticket 的执行器决定。"] },
+    { k: "Eval", t: "Eval：gate + assessment", doc: "001-domain · 002-authorization", pts: [
+      "gate 是确定性的第一层：alice 在允许名单内，又 @ 了 Agent，所以是明确请求（explicit）。",
+      "assessment 是模型的研判。主 Session 用一个路由工具，一次可以对多个候选作出 accept、attach、stop、ignore。",
+      "Decision 有四种：accept、stop、ignore、unavailable。Eval 超时会重新排队；连续第三次超时记为 unavailable。"] },
+    { k: "Ticket", t: "接单：Ticket + Mandate", doc: "001-domain · 002-authorization", pts: [
+      "只有 Eval 能创建 Ticket。",
+      "Mandate 记下：Policy 版本、范围、强度（explicit）、匹配的规则、alice 在 GitHub 上的身份、Source 如何收到这条 Trigger。",
+      "Mandate 不可变。范围变大要新开 Ticket。Ticket 订阅这个 Issue 的 Thread，之后的讨论不用再 @ Agent 就能送到。"] },
+    { k: "Assignment", t: "派工：Assignment → Executor", doc: "003-execution", pts: [
+      "Assignment 把 Ticket 绑定到一个执行器实例。状态 pending → running → ended，与 Ticket 的状态相互独立。",
+      "执行器 Session 叫 worker-<ticket id>，目录以 Ticket 短名命名。准备命令（如 git worktree）在第一次派工前运行一次，最多 10 分钟。",
+      "并发按工位计，并额外留一个工位给人的消息。没有空工位时，Ticket 显示为“排队中”。"] },
+    { k: "Executor", t: "执行器干活", doc: "003-execution · 004-prompts", pts: [
+      "开始实质工作前，先在原消息下确认一次：说明对象和预期结果。",
+      "前台 shell 命令 5 秒后转后台，执行器在下一步就能收到新消息。",
+      "需要人决定时，通过 human_action 在 Report 里提一个具体问题，主 Session 原样转发。"] },
+    { k: "Channel", t: "交付回原对话", doc: "003-execution · 004-prompts", pts: [
+      "结果通过 Channel 回到原来的 Issue：例如提交一个 PR，Report 为 ready。",
+      "消息先存后发，失败从 5 秒开始退避重试，最长 300 秒。同一 Ticket 发往同一对话的消息保持顺序。",
+      "“开了 PR”不等于“就绪”：草稿要标明未完成。"] },
+    { k: "面板", t: "面板与结束", doc: "003-execution · 005-panel", pts: [
+      "Report 为 ready 且有 PR 时，面板显示“等待审查”，排在“现在有什么需要我”里。",
+      "它开的 PR 都关闭（合并或关闭）后，Ticket 结束，但保留订阅。",
+      "之后有人在这些 Thread 上留言，可以在同一个 Mandate 下恢复工作，不需要新的 Eval。人叫停的 Ticket 不会再收到任何东西。"] },
+  ];
+  let cur = 0;
+  function draw2() {
+    SA.$("#d2-flow").innerHTML = STEPS.map((s, i) => (i ? '<span class="arr">→</span>' : "") + '<button type="button" data-i="' + i + '" class="' + (i === cur ? "on" : i < cur ? "past" : "") + '">' + (i + 1) + " " + s.k + "</button>").join("");
+    const s = STEPS[cur];
+    SA.$("#d2-card").innerHTML = "<h4>第 " + (cur + 1) + " 步 / " + STEPS.length + "：" + SA.esc(s.t) + '</h4><div class="doc">依据：' + SA.esc(s.doc) + "</div><ul>" + s.pts.map((p) => "<li>" + SA.esc(p) + "</li>").join("") + "</ul>";
+    SA.$("#d2-prev").disabled = cur === 0; SA.$("#d2-next").disabled = cur === STEPS.length - 1;
+  }
+  SA.$("#d2-flow").addEventListener("click", (e) => { const b = e.target.closest("button[data-i]"); if (b) { cur = +b.dataset.i; draw2(); } });
+  SA.$("#d2-prev").addEventListener("click", () => { if (cur > 0) { cur--; draw2(); } });
+  SA.$("#d2-next").addEventListener("click", () => { if (cur < STEPS.length - 1) { cur++; draw2(); } });
+  draw2();
+});
+</script>
+</body>
+</html>

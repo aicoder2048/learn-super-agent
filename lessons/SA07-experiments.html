@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>读懂实验：消融与批处理 · SA07</title>
+<link rel="stylesheet" href="assets/sa-lesson.css">
+<script src="assets/glossary-data.js"></script>
+<script src="assets/sa-lib.js"></script>
+<style>
+  .btn.on { background: var(--brand); color: var(--surface); border-color: var(--brand); }
+  .bars { display: grid; gap: 10px; margin: 10px 0; }
+  .bar-row { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 13.5px; }
+  .bar-row .nm { color: var(--ink-2); }
+  .bar-row .track { position: relative; height: 26px; background: var(--surface-2); border-radius: 6px; }
+  .bar-row .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; transition: width .35s; }
+  .bar-row .fill.ghost { opacity: .35; }
+  .bar-row .val { position: absolute; top: 3px; font-family: var(--mono); font-size: 12.5px; color: var(--ink); white-space: nowrap; transition: left .35s; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+  .prompt-q { font-family: var(--mono); font-size: 13px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 8px 0; color: var(--ink-2); }
+  .bt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
+  .bt-grid .kp .v { font-family: var(--mono); }
+  @media (max-width: 700px) { .bar-row { grid-template-columns: 1fr; } .bt-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header id="sa-topbar"></header>
+
+<div class="layout">
+<aside class="toc">
+  <h4>本课目录</h4>
+  <ol>
+    <li><a href="#s1">实验在测什么</a></li>
+    <li><a href="#s2">四种方案与两句提示词</a></li>
+    <li><a href="#s3">结果一：完成时间</a></li>
+    <li><a href="#s4">结果二：直通省了什么</a></li>
+    <li><a href="#s5">Router 的批处理</a></li>
+    <li><a href="#s6">读实验的注意事项</a></li>
+    <li><a href="#s7">自测与速记</a></li>
+  </ol>
+</aside>
+
+<main>
+<div class="hero">
+  <div class="kicker">SA07 · 验证与落地</div>
+  <h1>读懂实验：消融与批处理</h1>
+  <p>原文用两组初步实验检验核心的调度与路由设计。第一组比较整套系统；第二组单独给 Router 加压。本课带你读懂每一个数字，以及它们没说明什么。</p>
+  <div class="meta"><span>原文：§7 初步实验</span><span>阅读约 18 分钟</span><span>含 2 个互动演示、3 张原文图</span></div>
+</div>
+
+<div class="objectives">
+  <h4>学完本课，你能够：</h4>
+  <ul>
+    <li>说出消融实验的设置，以及它衡量的是调度能力，而不是单任务执行能力。</li>
+    <li>用 <a class="term" href="glossary.html#p50-p95">p50 / p95</a> 比较四种方案，并解释单 Session 方案慢且不稳定的原因。</li>
+    <li>说明直通机制在实验里省下了什么、没改变什么。</li>
+    <li>解释 Router 的<a class="term" href="glossary.html#batching">批处理</a>为什么“越忙越划算”，以及它的上限。</li>
+    <li>说出读这组实验时要保留的限定条件。</li>
+  </ul>
+</div>
+
+<!-- ============ 1 ============ -->
+<section class="lesson-sec" id="s1">
+  <h2><span class="num">01</span>实验在测什么</h2>
+  <p>先说结论：这组实验只测“调度与协作”，不测“把单个任务做得多好”。原文分两层做：</p>
+  <ol class="steps">
+    <li><b>端到端<a class="term" href="glossary.html#ablation">消融实验</a>（§7.1）</b>：对比双层架构、订阅直通与单 Session 方案。</li>
+    <li><b>Router 层压力测试（§7.2）</b>：单独测试 Router 的批处理。</li>
+  </ol>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>设置项</th><th>原文中的取值</th></tr>
+    <tr><td>驱动方式</td><td>群聊和 GitHub CI 消息流同时驱动四种端到端方案</td></tr>
+    <tr><td>单次实验规模</td><td>约 300 条消息，其中约 20 条是工作请求；其余是闲聊、跟进、叫停和 CI 消息</td></tr>
+    <tr><td>编码工作</td><td>用一个只消耗时间的工具代替</td></tr>
+    <tr><td>重复次数</td><td>每种方案重复运行 5 次</td></tr>
+    <tr><td>时间缩放</td><td>消息间隔与工作时长按 1/4 缩放；模型调用耗时为真实值</td></tr>
+    <tr><td>完成时间</td><td>从工作请求到结果消息的耗时</td></tr>
+  </table></div>
+  <div class="callout rule"><span class="ttl">关键限定</span>编码工作用只耗时的工具代替，因此实验衡量的是系统的调度与协作能力，而非对单个任务的执行能力。</div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section class="lesson-sec" id="s2">
+  <h2><span class="num">02</span>四种方案与两句提示词</h2>
+  <div class="vs">
+    <div><h4><span class="sw" style="background:#3d7be8"></span>Super-agent</h4><p>完整的双层架构 + 订阅直通。</p></div>
+    <div><h4><span class="sw" style="background:#16a085"></span>Super-agent，去掉直通</h4><p>后续事件也要经 Router 转发。用来单独看直通机制的作用。</p></div>
+    <div><h4><span class="sw" style="background:#d64541"></span>单 Session + Subagent 工具，中性提示</h4><p>一个主会话收所有消息，可以调用 <a class="term" href="glossary.html#subagent">Subagent</a>。分不分工由模型自己判断。</p></div>
+    <div><h4><span class="sw" style="background:#9b59b6"></span>单 Session + Subagent 工具，提示优先委派</h4><p>同上，但提示词明确鼓励把工作交给 Subagent。</p></div>
+  </div>
+  <p>两种单 Session 方案只差一句提示词。原文给出了原句：</p>
+  <p><b>中性提示：</b></p>
+  <div class="prompt-q">"Use a subagent for a piece of work when appropriate..."</div>
+  <p><b>提示优先委派：</b></p>
+  <div class="prompt-q">"Every message of the chat reaches you, so work you run yourself keeps stopping for new messages. Prefer handing each piece of work to a subagent of its own, and do only small things yourself..."</div>
+  <div class="callout note"><span class="ttl">补充：第二句提示在说什么</span>大意是：“聊天里每条消息都会到你这里，所以你自己干的活会不断被新消息打断。优先把每项工作交给它自己的 Subagent，你只做小事。”它其实是用提示词把双层架构的原则“教”给模型。实验要回答的问题之一，就是“靠提示词教”和“靠系统结构保证”有什么差别。</div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="lesson-sec" id="s3">
+  <h2><span class="num">03</span>结果一：完成时间</h2>
+  <figure class="fig"><img src="img/fig12.png" alt="工作请求的累计到达曲线与四种方案的累计完成曲线"><figcaption><b>原文图 12</b>工作请求的累计到达曲线（黑）与四种方案的累计完成曲线。5 次运行均值；消息间隔与工作时长按 1/4 缩放，模型调用耗时为真实值。</figcaption></figure>
+  <p>读图方法：黑线是工作请求到达的累计数。彩色线是完成的累计数。<b>彩色线离黑线越近，系统越快跟上需求。</b>蓝线（Super-agent）和绿色虚线（去掉直通）几乎重合，紧跟在黑线后面。红线（中性提示）明显落后。紫线（优先委派）前半段接近蓝线，最后一段拖出很长的尾巴，到约 50 分钟才完成。</p>
+  <figure class="fig"><img src="img/fig13.png" alt="四种方案的任务完成时间与读缓存 Token"><figcaption><b>原文图 13</b>每种方案重复运行 5 次；任务完成时间指从工作请求到结果消息的耗时。</figcaption></figure>
+
+  <div class="chart-card" id="demo1">
+    <div class="chart-head">
+      <div class="chart-title">动手看：四种方案的完成时间与开销</div>
+      <span class="btn-group">
+        <button class="btn on" data-m="p50">p50 完成时间</button><button class="btn" data-m="p95">p95 完成时间</button><button class="btn" data-m="tok">读缓存 token</button>
+      </span>
+    </div>
+    <div class="demo">
+      <div class="bars" id="d1-bars"></div>
+      <div style="margin-top:14px"><b style="font-size:14px;color:var(--brand)">时间 vs 开销：p95 完成时间（纵轴）与读缓存 token（横轴）</b></div>
+      <div id="d1-scatter"></div>
+    </div>
+    <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
+    <div class="chart-foot">切换三个指标。p50 是典型任务，p95 是慢的那一头。看散点图：越靠左下越好。Super-agent 的两种方案在下方（快且稳），但在右边（token 多）；单 Session 方案 token 少，却在上方。<br><span class="data-note">数据全部来自原文图 13。散点图是课程作者用同一组数据重画的。</span></div>
+  </div>
+
+  <h3>为什么单 Session 方案慢且不稳定</h3>
+  <p>原文的解释：带 Subagent 的单 Session 方案<b>受提示词影响很大</b>。主 Session 常常决定自己直接执行任务。</p>
+  <ul>
+    <li><b>中性提示</b>：5 次运行中，模型<b>一次都没有</b>调用 Subagent。所有工作都在主 Session 里进行，并不断被新消息打断。p95 达到 29.5 分钟。</li>
+    <li><b>提示优先委派</b>：5 次运行中有 4 次进行了委派，完成时间有所缩短，但整体仍慢于 Super-agent。剩下 1 次，模型判断工作“很小”而选择自己执行，形成图 12 中的紫色<a class="term" href="glossary.html#long-tail">长尾</a>。</li>
+  </ul>
+  <blockquote class="src">相比于在单 Session 中依赖提示词工程和模型临场判断分不分工，双层架构通过让 Router 不直接执行具体工作、Worker 仅接收所订阅 Thread 的消息，在系统层面上缓解了这一问题。<cite>§7.1</cite></blockquote>
+  <div class="callout tip"><span class="ttl">要点</span>“优先委派”的 p50 是 13.8 分钟，已经接近 Super-agent 的 12.4。差距主要在 p95（29.0 vs 15.7）。也就是说，提示词能把<b>多数情况</b>教对，但保证不了<b>每一次</b>。结构上的约束（Router 不配执行工具）才能消掉这条长尾。</div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section class="lesson-sec" id="s4">
+  <h2><span class="num">04</span>结果二：直通省了什么</h2>
+  <p>先说开销。由于维护了多个独立会话，Super-agent 单次实验的<a class="term" href="glossary.html#cache-read-token">读缓存 token</a> 高于单 Session 方案。原文的总结是：<b>以更多的 token 消耗，换取更短且更稳定的完成时间。</b></p>
+  <p>再看<a class="term" href="glossary.html#subscription">直通</a>。在 Super-agent 内部去掉直通之后：</p>
+  <div class="grid-3">
+    <div class="kp"><div class="k">任务完成时间</div><div class="v">基本一致</div><p>p50/p95：12.4/15.7 → 12.6/15.5 分钟。</p></div>
+    <div class="kp"><div class="k">Router 要做的决定</div><div class="v">约 +30%</div><p>原本直通给 Worker 的后续事件，都要 Router 再判断一次。</p></div>
+    <div class="kp"><div class="k">读缓存 token</div><div class="v">约 +37%</div><p>2323 万 → 3177 万。</p></div>
+  </div>
+  <div class="callout rule"><span class="ttl">原文结论</span>在实验负载下，直通机制不提高任务完成质量与速度，但为 Router Session 节省了可观的 token 与推理开销。</div>
+  <p>为什么去掉直通，速度却没变慢？答案在下一节：Router 在压力下会自动批处理，峰值负载增加了，仍没碰到单 Router 的吞吐瓶颈。</p>
+</section>
+
+<!-- ============ 5 ============ -->
+<section class="lesson-sec" id="s5">
+  <h2><span class="num">05</span>Router 的批处理</h2>
+  <p>先说结论：单个常驻 Router Session 没有想象中那么容易成为瓶颈。它越忙，每个决定分摊到的推理时间反而越短。</p>
+  <p>测试方法：Router 调用真实模型，Worker 使用 Mock 模型。需要决定的 <a class="term" href="glossary.html#trigger">Trigger</a> 到达速率，从每分钟约 1 条逐步提升到约 40 条。观察三个量：平均 batch 大小、单次请求耗时、单个决定分摊的推理时间。</p>
+  <figure class="fig"><img src="img/fig14.png" alt="Router Session 的 batch 大小、单次请求耗时与单个决定的分摊推理时间"><figcaption><b>原文图 14</b>不同 Trigger 到达速率下 Router Session 的 batch 大小、单次请求耗时与单个决定的分摊推理时间。</figcaption></figure>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>指标</th><th>约 1 条/分</th><th>约 40 条/分</th><th>变化</th></tr>
+    <tr><td>平均 batch 大小</td><td>1.0</td><td>2.8</td><td>×2.8</td></tr>
+    <tr><td>单次请求耗时</td><td>2.5 秒</td><td>3.9 秒</td><td>×1.56</td></tr>
+    <tr><td>单个决定的分摊推理时间</td><td>6.4 秒</td><td>1.6 秒</td><td>降到 1/4</td></tr>
+  </table></div>
+  <h3>为什么合并处理几乎不加钱</h3>
+  <ol class="steps">
+    <li><b>积压自动成批。</b>上一轮推理期间到达的 Trigger 会积压下来，在下一次 LLM 调用中一并注入。</li>
+    <li><b>Router 每步是“长输入、短输出”。</b>它只做轻量的交互与分派，输出很短。</li>
+    <li><b>长输入在 <a class="term" href="glossary.html#prefill">Prefill</a> 阶段并行计算。</b>多加几条 Trigger，只是让输入变长一点。单次请求耗时的增长远慢于批处理大小。</li>
+  </ol>
+
+  <div class="chart-card" id="demo2">
+    <div class="chart-head">
+      <div class="chart-title">动手看：到达速率越高，每个决定越便宜</div>
+      <label class="ctrl">Trigger 到达速率 = <b id="d2-rv">20</b> 条/分 <input id="d2-r" type="range" min="1" max="40.5" step="0.5" value="20"></label>
+    </div>
+    <div class="demo">
+      <div class="bt-grid">
+        <div class="kp"><div class="k">平均 batch 大小</div><div class="v" id="d2-b">—</div><p>每次 LLM 调用合并处理几条 Trigger</p></div>
+        <div class="kp"><div class="k">单次请求耗时</div><div class="v" id="d2-t">—</div><p>一次 LLM 调用花多久</p></div>
+        <div class="kp"><div class="k">每个决定的分摊推理时间</div><div class="v" id="d2-a">—</div><p>越低越好</p></div>
+      </div>
+      <div id="d2-chart"></div>
+    </div>
+    <div class="chart-body" style="padding:0 16px"><div class="readout" id="d2-out"></div></div>
+    <div class="chart-foot">拖动滑块。batch 从 1 涨到近 3，单次请求耗时只从约 2.5 秒涨到约 3.9 秒，所以每个决定的分摊时间从约 6.4 秒降到约 1.6 秒。读数下方的“补充推算”说明了 Router 为什么能跟上到达速率。<br><span class="data-note">曲线上的 7 个点是课程作者从原文图 14 目测读出的近似值，两点之间线性插值。原文文字给出的端点是：batch 1.0→2.8、单次请求 2.5→3.9 秒、分摊 6.4→1.6 秒。</span></div>
+  </div>
+
+  <div class="callout note"><span class="ttl">补充推测：分摊时间为什么比单次请求还长</span>在低负载下，每个决定分摊 6.4 秒，比单次请求的 2.5 秒还长。一个可能的解释是：Router 做出一个决定，可能需要不止一次 LLM 调用（例如先调用工具查询，再回复或分派）。<b>原文没有说明这一点</b>，这里只是推测。</div>
+
+  <h3>批处理的上限</h3>
+  <p>原文给了两个上限：<b>上下文长度</b>，以及<b>模型在一轮中能准确处理多少条 Trigger</b>。在一定范围内，积压越多，分摊越低；超出这个范围，合并就会出错或放不下。</p>
+  <p>原文的结论：这解释了为什么去掉直通使 Router 峰值负载增加后，仍未触及单 Router 的吞吐瓶颈。因此在目前的团队规模下，<b>无需过早对 Router 层做<a class="term" href="glossary.html#sharding">水平切分</a></b>而牺牲全局上下文的连续性。</p>
+</section>
+
+<!-- ============ 6 ============ -->
+<section class="lesson-sec" id="s6">
+  <h2><span class="num">06</span>读实验的注意事项</h2>
+  <p>原文自己说：实验基于合成负载与简化环境，部分设置还可以更加严谨，结果仅作为初步参考。读这组数字时，把下面几条放在心上。点一下可以打勾。</p>
+  <ul class="checklist">
+    <li><b>合成负载。</b>约 300 条消息是构造的，不是真实团队的一天。</li>
+    <li><b>工作被替换成计时工具。</b>结果只说明调度与协作，不说明 Super-agent 写代码更好。</li>
+    <li><b>时间按 1/4 缩放。</b>消息间隔与工作时长缩放了，模型调用耗时是真实的。缩放会改变“模型调用耗时”在总时间里的占比。</li>
+    <li><b>样本少。</b>每种方案 5 次；p95 在 5 次运行的任务里统计，单次异常（如紫色长尾）影响很大。</li>
+    <li><b>token 换时间。</b>Super-agent 更快更稳，但读缓存 token 是单 Session 方案的 2–4 倍。是否划算取决于你更在乎什么。</li>
+    <li><b>规模条件。</b>“单个 Router 够用”是“在我们目前的团队规模下”的结论。</li>
+  </ul>
+</section>
+
+<!-- ============ 7 ============ -->
+<section class="lesson-sec" id="s7">
+  <h2><span class="num">07</span>自测与速记</h2>
+  <div class="quiz" data-answer="2">
+    <div class="q">原文消融实验里，编码工作用一个只消耗时间的工具代替。这意味着实验衡量的是？</div>
+    <div class="opts"><button>模型写代码的质量</button><button>单个任务的执行能力</button><button>系统的调度与协作能力</button><button>工具调用的准确率</button></div>
+    <div class="explain">原文：实验衡量的是系统的调度与协作能力，而非对单个任务的执行能力。</div>
+  </div>
+  <div class="quiz" data-answer="0">
+    <div class="q">在“中性提示”下，单 Session 方案为什么最慢？</div>
+    <div class="opts"><button>模型 5 次运行中一次都没调用 Subagent，所有工作都在主 Session 里做，并不断被新消息打断</button><button>Subagent 太多，互相冲突</button><button>Router 成了瓶颈</button><button>token 用完了</button></div>
+    <div class="explain">中性提示下，5 次运行中模型一次都没有调用 Subagent，p95 达到 29.5 分钟。</div>
+  </div>
+  <div class="quiz" data-answer="3">
+    <div class="q">去掉直通之后，下面哪个说法符合原文实验结果？</div>
+    <div class="opts"><button>任务完成时间明显变长</button><button>任务完成质量下降</button><button>读缓存 token 减少</button><button>完成时间基本一致，但 Router 决定增加约 30%，读缓存 token 增加约 37%</button></div>
+    <div class="explain">原文：直通机制不提高任务完成质量与速度，但为 Router Session 节省了可观的 token 与推理开销。</div>
+  </div>
+  <div class="quiz" data-answer="1">
+    <div class="q">Router 批处理“越忙越划算”的主要原因是？</div>
+    <div class="opts"><button>忙的时候模型会换成更快的版本</button><button>Router 每步是长输入、短输出，多条 Trigger 在 Prefill 阶段并行计算，单次请求耗时增长远慢于 batch 大小</button><button>忙的时候 Router 会跳过一部分 Trigger</button><button>Worker 帮 Router 分担了决定</button></div>
+    <div class="explain">batch 从 1.0 升到 2.8，单次请求只从 2.5 秒升到 3.9 秒，每个决定的分摊时间从 6.4 秒降到 1.6 秒。</div>
+  </div>
+
+  <h3>速记表</h3>
+  <div class="tbl-wrap"><table class="tbl">
+    <tr><th>要点</th><th>一句话</th></tr>
+    <tr><td>实验设置</td><td>约 300 条消息/次、约 20 条请求；编码用计时工具代替；每方案 5 次；时间缩放 1/4</td></tr>
+    <tr><td>完成时间</td><td>Super-agent p50/p95 = 12.4/15.7 分钟；单 Session 中性提示 20.4/29.5；优先委派 13.8/29.0</td></tr>
+    <tr><td>根因</td><td>单 Session 分不分工靠提示词和临场判断；双层架构在系统层面保证</td></tr>
+    <tr><td>代价</td><td>Super-agent 读缓存 token 更多（2323 万 vs 605 万 / 1082 万）：用 token 换时间和稳定</td></tr>
+    <tr><td>直通</td><td>不改变速度；Router 决定 −约 30%，token −约 37%（2323 万 vs 3177 万）</td></tr>
+    <tr><td>批处理</td><td>1→40 条/分：batch 1.0→2.8，单次 2.5→3.9 秒，分摊 6.4→1.6 秒；目前无需切分 Router</td></tr>
+    <tr><td>限定</td><td>合成负载、简化环境，仅作初步参考</td></tr>
+  </table></div>
+
+  <h3>相关课程</h3>
+  <div class="related">
+    <a href="SA02-two-layer.html"><small>SA02</small>双层架构：Router 与 Worker（批处理的原理）</a>
+    <a href="SA03-event-filter-route.html#s3"><small>SA03</small>订阅与直通</a>
+    <a href="SA08-prototype.html"><small>下一课 · SA08</small>开源原型 dsh-superagent 拆解</a>
+  </div>
+</section>
+
+<nav id="sa-pager" data-current="SA07-experiments.html"></nav>
+<p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§7（2026-10-31）。实验数字全部来自原文；图 14 的中间点为目测近似值。标为“补充”的内容是课程作者的解释，不是原文观点。</p>
+</main>
+</div>
+
+<script>
+SA.onReady(function () {
+  /* ---- 1. 四种方案 ---- */
+  const S = [
+    { name: "Super-agent", color: SA.C.blue, p50: 12.4, p95: 15.7, tok: 2323 },
+    { name: "Super-agent，去掉直通", color: SA.C.teal, p50: 12.6, p95: 15.5, tok: 3177 },
+    { name: "单 Session + Subagent，中性提示", color: SA.C.red, p50: 20.4, p95: 29.5, tok: 605 },
+    { name: "单 Session + Subagent，提示优先委派", color: SA.C.purple, p50: 13.8, p95: 29.0, tok: 1082 },
+  ];
+  const LABEL = { p50: ["p50 完成时间", " 分钟", 1], p95: ["p95 完成时间", " 分钟", 1], tok: ["单次实验读缓存 token", " 万", 0] };
+  let metric = "p50";
+  function draw1() {
+    SA.$$("#demo1 [data-m]").forEach((b) => b.classList.toggle("on", b.dataset.m === metric));
+    const [lab, unit, d] = LABEL[metric], max = (metric === "tok" ? Math.max(...S.map((s) => s.tok)) : Math.max(...S.map((s) => s.p95))) * 1.22;
+    SA.$("#d1-bars").innerHTML = S.map((s) => {
+      const w = (100 * s[metric]) / max;
+      const ghost = metric !== "tok" ? '<div class="fill ghost" style="width:' + (100 * s.p95) / max + "%;background:" + s.color + '"></div>' : "";
+      const main = metric === "p95" ? "" : '<div class="fill" style="width:' + w + "%;background:" + s.color + '"></div>';
+      const p95fill = metric === "p95" ? '<div class="fill" style="width:' + w + "%;background:" + s.color + '"></div>' : "";
+      return '<div class="bar-row"><div class="nm"><span class="sw" style="background:' + s.color + '"></span>' + s.name + '</div><div class="track">' +
+        (metric === "p50" ? ghost : "") + main + p95fill + '<span class="val" style="left:calc(' + w + '% + 6px)">' + SA.fmt(s[metric], d) + unit + "</span></div></div>";
+    }).join("") + (metric === "p50" ? '<p class="data-note" style="margin:2px 0 0">浅色部分延伸到 p95，长度差就是“慢的那一头”比典型情况多出的时间。</p>' : "");
+    const base = S[0];
+    SA.$("#d1-out").textContent = lab + "（原文图 13）：\n" + S.map((s) => "· " + s.name + "：" + SA.fmt(s[metric], d) + unit +
+      (s === base ? "" : "（相对 Super-agent " + (s[metric] >= base[metric] ? "+" : "") + SA.fmt((100 * (s[metric] - base[metric])) / base[metric], 0) + "%）")).join("\n") +
+      "\n小结：Super-agent 两种方案 p95 都在 16 分钟以内；单 Session 两种方案 p95 都约 29–30 分钟，但 token 只有 Super-agent 的 26%–47%。";
+  }
+  function scatter() {
+    const W = 760, Hh = 260, L = 60, R = 20, T = 16, B = 40;
+    const xs = (v) => L + ((v - 0) / 3500) * (W - L - R), ys = (v) => T + (1 - (v - 10) / 22) * (Hh - T - B);
+    let g = '<svg viewBox="0 0 ' + W + " " + Hh + '" role="img" aria-label="p95 与 token 的散点图">';
+    for (let v = 0; v <= 3500; v += 500) g += '<line class="edge" style="opacity:.25" x1="' + xs(v) + '" y1="' + T + '" x2="' + xs(v) + '" y2="' + (Hh - B) + '"/><text class="sm" x="' + xs(v) + '" y="' + (Hh - B + 16) + '" text-anchor="middle">' + v + "</text>";
+    for (let v = 10; v <= 32; v += 5) g += '<line class="edge" style="opacity:.25" x1="' + L + '" y1="' + ys(v) + '" x2="' + (W - R) + '" y2="' + ys(v) + '"/><text class="sm" x="' + (L - 8) + '" y="' + (ys(v) + 4) + '" text-anchor="end">' + v + "</text>";
+    g += '<text class="sm" x="' + (W - R) + '" y="' + (Hh - 4) + '" text-anchor="end">读缓存 token（万）→ 越左越省</text><text class="sm" x="' + 4 + '" y="' + 12 + '">p95（分钟）↓ 越低越稳</text>';
+    const off = { 0: [0, 26, "middle"], 1: [-12, -14, "end"], 2: [-4, 26, "start"], 3: [12, -12, "start"] };
+    S.forEach((s, k) => {
+      g += '<circle cx="' + xs(s.tok) + '" cy="' + ys(s.p95) + '" r="8" fill="' + s.color + '"/><text x="' + (xs(s.tok) + off[k][0]) + '" y="' + (ys(s.p95) + off[k][1]) + '" text-anchor="' + off[k][2] + '">' + s.name + "</text>";
+    });
+    SA.$("#d1-scatter").innerHTML = g + "</svg>";
+  }
+  SA.$$("#demo1 [data-m]").forEach((b) => b.addEventListener("click", () => { metric = b.dataset.m; draw1(); }));
+  draw1(); scatter();
+
+  /* ---- 2. 批处理曲线（原文图 14 目测近似值） ---- */
+  const P = [[1, 1.0, 2.5, 6.35], [3, 1.0, 2.4, 5.95], [6, 1.05, 2.7, 5.3], [13.5, 1.25, 2.9, 3.65], [21, 1.5, 2.7, 2.75], [26, 1.83, 3.3, 2.27], [40.5, 2.82, 3.9, 1.55]];
+  function interp(r, k) {
+    for (let i = 1; i < P.length; i++) if (r <= P[i][0]) { const a = P[i - 1], b = P[i], f = (r - a[0]) / (b[0] - a[0]); return a[k] + f * (b[k] - a[k]); }
+    return P[P.length - 1][k];
+  }
+  const W = 760, Hh = 270, L = 50, R = 50, T = 54, B = 34;
+  const xs = (v) => L + (v / 42) * (W - L - R);
+  const yL = (v) => T + (1 - v / 7) * (Hh - T - B);        // 左轴：秒（0–7）
+  const yR = (v) => T + (1 - v / 3.5) * (Hh - T - B);      // 右轴：batch（0–3.5）
+  function chart(r) {
+    let g = '<svg viewBox="0 0 ' + W + " " + Hh + '" role="img" aria-label="批处理曲线">';
+    for (let v = 0; v <= 40; v += 10) g += '<text class="sm" x="' + xs(v) + '" y="' + (Hh - B + 16) + '" text-anchor="middle">' + v + "</text>";
+    for (let v = 0; v <= 7; v += 1) g += '<line class="edge" style="opacity:.2" x1="' + L + '" y1="' + yL(v) + '" x2="' + (W - R) + '" y2="' + yL(v) + '"/><text class="sm" x="' + (L - 8) + '" y="' + (yL(v) + 4) + '" text-anchor="end">' + v + "s</text>";
+    for (let v = 0; v <= 3.5; v += 1) g += '<text class="sm" x="' + (W - R + 8) + '" y="' + (yR(v) + 4) + '">' + v + "</text>";
+    g += '<text class="sm" x="' + (W / 2) + '" y="' + (Hh - 2) + '" text-anchor="middle">需要决定的 Trigger 到达速率（条/分）</text>';
+    const line = (k, y, color, dash) => '<polyline fill="none" stroke="' + color + '" stroke-width="2.4"' + (dash ? ' stroke-dasharray="6 4"' : "") + ' points="' + P.map((p) => xs(p[0]) + "," + y(p[k])).join(" ") + '"/>' +
+      P.map((p) => '<circle cx="' + xs(p[0]) + '" cy="' + y(p[k]) + '" r="3.5" fill="' + color + '"/>').join("");
+    g += line(3, yL, SA.C.blue) + line(2, yL, SA.C.orange, true) + line(1, yR, SA.C.teal);
+    g += '<line x1="' + xs(r) + '" y1="' + T + '" x2="' + xs(r) + '" y2="' + (Hh - B) + '" stroke="' + SA.C.red + '" stroke-width="1.5"/>';
+    const lx = L;
+    g += '<text x="' + lx + '" y="' + (14) + '" style="fill:' + SA.C.blue + '">— 每个决定分摊（秒，左轴）</text>';
+    g += '<text x="' + (lx + 260) + '" y="' + (14) + '" style="fill:' + SA.C.orange + '">- - 单次请求耗时（秒，左轴）</text>';
+    g += '<text x="' + lx + '" y="' + (34) + '" style="fill:' + SA.C.teal + '">— 平均 batch 大小（右轴）</text>';
+    return g + "</svg>";
+  }
+  function draw2() {
+    const r = +SA.$("#d2-r").value, b = interp(r, 1), t = interp(r, 2), a = interp(r, 3);
+    SA.$("#d2-rv").textContent = r;
+    SA.$("#d2-b").textContent = SA.fmt(b, 2) + " 条";
+    SA.$("#d2-t").textContent = SA.fmt(t, 1) + " 秒";
+    SA.$("#d2-a").textContent = SA.fmt(a, 2) + " 秒";
+    SA.$("#d2-chart").innerHTML = chart(r);
+    const cap = 60 / a;
+    SA.$("#d2-out").textContent =
+      "到达速率 " + r + " 条/分（插值，近似值）：batch " + SA.fmt(b, 2) + "，单次请求 " + SA.fmt(t, 1) + " 秒，每个决定分摊 " + SA.fmt(a, 2) + " 秒\n" +
+      "相对最低负载：batch ×" + SA.fmt(b / P[0][1], 2) + "，单次请求 ×" + SA.fmt(t / P[0][2], 2) + "，分摊时间 ×" + SA.fmt(a / P[0][3], 2) + "\n" +
+      "补充推算（原文没有给出）：按分摊时间折算，Router 每分钟约能做 " + SA.fmt(cap, 1) + " 个决定；若不批处理（一直按最低负载的 " + SA.fmt(P[0][3], 2) + " 秒/个），每分钟只能做约 " + SA.fmt(60 / P[0][3], 1) + " 个。" +
+      (r > 60 / P[0][3] ? "\n→ 当前到达速率已超过“不批处理”的处理能力；正是批处理让 Router 跟上了。" : "");
+  }
+  SA.$("#d2-r").addEventListener("input", draw2);
+  draw2();
+});
+</script>
+</body>
+</html>
