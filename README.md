@@ -126,3 +126,7 @@ uv run --no-project --with playwright python tools/check_page.py index.html glos
 - 开源原型：[deepseek-ai/dsh-superagent-prototype](https://github.com/deepseek-ai/dsh-superagent-prototype)（MIT），设计文档存档于 `docs/articles/prototype-docs/`，许可证见同目录 `LICENSE`。
 - 课程中标为“补充”的内容和所有模拟演示，是课程作者的解释，不是原文观点。
 - 名字相近但无关的项目：`superagentxai/superagentx` 是第三方多 Agent 框架，与本文和 DeepSeek 的原型无关。
+
+## 许可证
+
+本仓库的课程页面、脚本和文档采用 [MIT 许可证](LICENSE)。许可证不覆盖原文和原图（版权归 DeepSeek，不在本仓库中），也不覆盖 `docs/articles/prototype-docs/`（沿用原型自己的 MIT 许可证）。

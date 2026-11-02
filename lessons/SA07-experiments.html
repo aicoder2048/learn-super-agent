@@ -76,7 +76,7 @@
     <tr><td>时间缩放</td><td>消息间隔与工作时长按 1/4 缩放；模型调用耗时为真实值</td></tr>
     <tr><td>完成时间</td><td>从工作请求到结果消息的耗时</td></tr>
   </table></div>
-  <div class="callout rule"><span class="ttl">关键限定</span>编码工作用只耗时的工具代替，因此实验衡量的是系统的调度与协作能力，而非对单个任务的执行能力。</div>
+  <div class="callout rule"><span class="ttl">关键限定</span>编码工作换成了只耗时的工具。所以实验衡量的是系统的调度与协作能力。它不衡量单个任务做得好不好。</div>
 </section>
 
 <!-- ============ 2 ============ -->
@@ -93,7 +93,7 @@
   <div class="prompt-q">"Use a subagent for a piece of work when appropriate..."</div>
   <p><b>提示优先委派：</b></p>
   <div class="prompt-q">"Every message of the chat reaches you, so work you run yourself keeps stopping for new messages. Prefer handing each piece of work to a subagent of its own, and do only small things yourself..."</div>
-  <div class="callout note"><span class="ttl">补充：第二句提示在说什么</span>大意是：“聊天里每条消息都会到你这里，所以你自己干的活会不断被新消息打断。优先把每项工作交给它自己的 Subagent，你只做小事。”它其实是用提示词把双层架构的原则“教”给模型。实验要回答的问题之一，就是“靠提示词教”和“靠系统结构保证”有什么差别。</div>
+  <div class="callout note"><span class="ttl">补充：第二句提示在说什么</span>大意是：“聊天里每条消息都会到你这里，所以新消息会不断打断你自己干的活。优先把每项工作交给它自己的 Subagent，你只做小事。”它其实是用提示词把双层架构的原则“教”给模型。实验要回答的问题之一，就是“靠提示词教”和“靠系统结构保证”有什么差别。</div>
 </section>
 
 <!-- ============ 3 ============ -->
@@ -116,14 +116,14 @@
       <div id="d1-scatter"></div>
     </div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
-    <div class="chart-foot">切换三个指标。p50 是典型任务，p95 是慢的那一头。看散点图：越靠左下越好。Super-agent 的两种方案在下方（快且稳），但在右边（token 多）；单 Session 方案 token 少，却在上方。<br><span class="data-note">数据全部来自原文图 13。散点图是课程作者用同一组数据重画的。</span></div>
+    <div class="chart-foot">切换三个指标。p50 是典型任务，p95 是慢的那一头。<br>看散点图：越靠左下越好。Super-agent 的两种方案在下方（快且稳），但在右边（token 多）。单 Session 方案 token 少，却在上方。<br><span class="data-note">数据全部来自原文图 13。散点图是课程作者用同一组数据重画的。</span></div>
   </div>
 
   <h3>为什么单 Session 方案慢且不稳定</h3>
   <p>原文的解释：带 Subagent 的单 Session 方案<b>受提示词影响很大</b>。主 Session 常常决定自己直接执行任务。</p>
   <ul>
-    <li><b>中性提示</b>：5 次运行中，模型<b>一次都没有</b>调用 Subagent。所有工作都在主 Session 里进行，并不断被新消息打断。p95 达到 29.5 分钟。</li>
-    <li><b>提示优先委派</b>：5 次运行中有 4 次进行了委派，完成时间有所缩短，但整体仍慢于 Super-agent。剩下 1 次，模型判断工作“很小”而选择自己执行，形成图 12 中的紫色<a class="term" href="glossary.html#long-tail">长尾</a>。</li>
+    <li><b>中性提示</b>：5 次运行中，模型<b>一次都没有</b>调用 Subagent。所有工作都在主 Session 里做，新消息不断打断它。p95 达到 29.5 分钟。</li>
+    <li><b>提示优先委派</b>：5 次运行中有 4 次做了委派。完成时间缩短了，但整体仍慢于 Super-agent。剩下 1 次，模型判断工作“很小”而选择自己执行，形成图 12 中的紫色<a class="term" href="glossary.html#long-tail">长尾</a>。</li>
   </ul>
   <blockquote class="src">相比于在单 Session 中依赖提示词工程和模型临场判断分不分工，双层架构通过让 Router 不直接执行具体工作、Worker 仅接收所订阅 Thread 的消息，在系统层面上缓解了这一问题。<cite>§7.1</cite></blockquote>
   <div class="callout tip"><span class="ttl">要点</span>“优先委派”的 p50 是 13.8 分钟，已经接近 Super-agent 的 12.4。差距主要在 p95（29.0 vs 15.7）。也就是说，提示词能把<b>多数情况</b>教对，但保证不了<b>每一次</b>。结构上的约束（Router 不配执行工具）才能消掉这条长尾。</div>
@@ -176,10 +176,10 @@
       <div id="d2-chart"></div>
     </div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d2-out"></div></div>
-    <div class="chart-foot">拖动滑块。batch 从 1 涨到近 3，单次请求耗时只从约 2.5 秒涨到约 3.9 秒，所以每个决定的分摊时间从约 6.4 秒降到约 1.6 秒。读数下方的“补充推算”说明了 Router 为什么能跟上到达速率。<br><span class="data-note">曲线上的 7 个点是课程作者从原文图 14 目测读出的近似值，两点之间线性插值。原文文字给出的端点是：batch 1.0→2.8、单次请求 2.5→3.9 秒、分摊 6.4→1.6 秒。</span></div>
+    <div class="chart-foot">拖动滑块。batch 从 1 涨到近 3，单次请求耗时只从约 2.5 秒涨到约 3.9 秒。所以每个决定的分摊时间从约 6.4 秒降到约 1.6 秒。读数下方的“补充推算”说明了 Router 为什么能跟上到达速率。<br><span class="data-note">曲线上的 7 个点是课程作者从原文图 14 目测读出的近似值，两点之间线性插值。原文文字给出的端点是：batch 1.0→2.8、单次请求 2.5→3.9 秒、分摊 6.4→1.6 秒。</span></div>
   </div>
 
-  <div class="callout note"><span class="ttl">补充推测：分摊时间为什么比单次请求还长</span>在低负载下，每个决定分摊 6.4 秒，比单次请求的 2.5 秒还长。一个可能的解释是：Router 做出一个决定，可能需要不止一次 LLM 调用（例如先调用工具查询，再回复或分派）。<b>原文没有说明这一点</b>，这里只是推测。</div>
+  <div class="callout note"><span class="ttl">补充推测：分摊时间为什么比单次请求还长</span>在低负载下，每个决定分摊 6.4 秒，比单次请求的 2.5 秒还长。一个可能的解释是：Router 做一个决定，可能要调用不止一次 LLM。例如先调用工具查询，再回复或分派。<b>原文没有说明这一点</b>，这里只是推测。</div>
 
   <h3>批处理的上限</h3>
   <p>原文给了两个上限：<b>上下文长度</b>，以及<b>模型在一轮中能准确处理多少条 Trigger</b>。在一定范围内，积压越多，分摊越低；超出这个范围，合并就会出错或放不下。</p>
@@ -189,10 +189,10 @@
 <!-- ============ 6 ============ -->
 <section class="lesson-sec" id="s6">
   <h2><span class="num">06</span>读实验的注意事项</h2>
-  <p>原文自己说：实验基于合成负载与简化环境，部分设置还可以更加严谨，结果仅作为初步参考。读这组数字时，把下面几条放在心上。点一下可以打勾。</p>
+  <p>原文自己给了三条限定：实验基于合成负载与简化环境；部分设置还可以更加严谨；结果仅作为初步参考。读这组数字时，把下面几条放在心上。点一下可以打勾。</p>
   <ul class="checklist">
     <li><b>合成负载。</b>约 300 条消息是构造的，不是真实团队的一天。</li>
-    <li><b>工作被替换成计时工具。</b>结果只说明调度与协作，不说明 Super-agent 写代码更好。</li>
+    <li><b>计时工具代替了真实工作。</b>结果只说明调度与协作，不说明 Super-agent 写代码更好。</li>
     <li><b>时间按 1/4 缩放。</b>消息间隔与工作时长缩放了，模型调用耗时是真实的。缩放会改变“模型调用耗时”在总时间里的占比。</li>
     <li><b>样本少。</b>每种方案 5 次；p95 在 5 次运行的任务里统计，单次异常（如紫色长尾）影响很大。</li>
     <li><b>token 换时间。</b>Super-agent 更快更稳，但读缓存 token 是单 Session 方案的 2–4 倍。是否划算取决于你更在乎什么。</li>

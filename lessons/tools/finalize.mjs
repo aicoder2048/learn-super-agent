@@ -56,7 +56,7 @@ if (merge) {
   const header = "/* 共用术语表数据。glossary.html 用它生成页面；课程页用它显示悬停提示。\n" +
     " * 字段: term 中文名, en 英文, cat 分类, short 一句话 (悬停提示), body 详细解释 (HTML), see 相关术语 id\n" +
     " * 分类只用：基础概念 / 架构 / 事件驱动 / 上下文 / 交互 / 运行与可靠性 / 安全与边界 / 原型实现 / 系统设计经典\n" +
-    " * 写法: AST-STE100 风格 —— 短句、主动语态、一句一个意思、先说是什么再说怎么用。\n */\n";
+    " * 写法: ASD-STE100 风格 —— 短句、主动语态、一句一个意思、先说是什么再说怎么用。\n */\n";
   const body = Object.entries(G).map(([k, v]) => "  " + JSON.stringify(k) + ": " + JSON.stringify(v) + ",").join("\n");
   fs.writeFileSync(A("assets/glossary-data.js"), header + "window.SA_GLOSSARY = {\n" + body + "\n};\n");
   for (const p of pages) {

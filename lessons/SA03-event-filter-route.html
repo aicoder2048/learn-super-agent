@@ -85,13 +85,13 @@
     <div class="kp"><div class="k">Slow Path</div><div class="v">大模型推理</div><p>灵活，但成本高、延迟高。留给真正需要语义理解的情况。</p></div>
     <div class="kp"><div class="k">Fast Path</div><div class="v">确定性代码</div><p>把已经明确、稳定的高频判断固化成代码。延迟低，成本低。</p></div>
   </div>
-  <div class="callout note"><span class="ttl">补充：Fast / Slow Path 的出处</span>这个思路在网络设备和操作系统里很常见。例如路由器：绝大多数数据包按转发表由硬件直接转发（Fast Path），少数特殊包才交给 CPU 慢慢处理（Slow Path）。原则是：让常见情况快，让少见情况对。</div>
+  <div class="callout note"><span class="ttl">补充：Fast / Slow Path 的出处</span>这个思路在网络设备和操作系统里很常见。例如路由器：绝大多数数据包由硬件按转发表直接转发，这是 Fast Path。少数特殊包才交给 CPU 慢慢处理，这是 Slow Path。原则是：让常见情况快，让少见情况对。</div>
 </section>
 
 <!-- ============ 3 ============ -->
 <section class="lesson-sec" id="s3">
   <h2><span class="num">03</span>两级过滤</h2>
-  <p>事件进入系统后的第一步是过滤。目标是：在调用大模型之前，先用确定性策略筛掉噪音，只把需要语义理解的<a class="term" href="glossary.html#candidate-event">候选事件</a>交给模型。原文采用程序策略与大模型相结合的两级过滤：</p>
+  <p>事件进入系统后的第一步是过滤。目标是在调用大模型之前，先用确定性策略筛掉噪音。只有需要语义理解的<a class="term" href="glossary.html#candidate-event">候选事件</a>才交给模型。原文采用程序策略与大模型相结合的两级过滤：</p>
   <div class="vs">
     <div><h4>程序层策略 <span class="pill fast">Fast Path</span></h4><p>按确定性条件直接用代码做准入检查：事件来源、群组范围、用户或机器人白名单。</p><p>例如：对不同来源分别设置“仅响应明确请求”“作为候选事件”或“直接忽略”。</p><p>在调用模型前，滤掉大部分无关消息。</p></div>
     <div><h4>语义层策略 <span class="pill slow">Slow Path</span></h4><p>通过程序层的候选事件交给 LLM。LLM 按“用提示词写的策略”和上下文，判断要不要行动。</p><p>它同时是<b>面向人的自然语言扩展点</b>：随时可以用提示词开关或新增策略。</p></div>
@@ -113,7 +113,7 @@
       <ul class="msgs" id="d1-msgs"></ul>
     </div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
-    <div class="chart-foot">先看默认配置：闲聊群只认明确请求，机器人消息直接忽略，大部分噪音在程序层就被滤掉，不花一次模型调用。试着把“闲聊群”改成“作为候选事件”，看进入大模型的条数怎么涨；再关掉“静默复现并修复”，看同样的候选事件怎样变成“不行动”。<br><span class="data-note">消息是虚构的示例。来源、策略选项和“静默复现并修复”策略名取自原文；具体的判断由本页按简单规则模拟，真实系统里由 LLM 根据提示词判断。</span></div>
+    <div class="chart-foot">先看默认配置：闲聊群只认明确请求，机器人消息直接忽略。程序层就滤掉了大部分噪音，不花一次模型调用。<br>试着把“闲聊群”改成“作为候选事件”，看进入大模型的条数怎么涨。再关掉“静默复现并修复”，看同样的候选事件怎样变成“不行动”。<br><span class="data-note">消息是虚构的示例。来源、策略选项和“静默复现并修复”策略名取自原文；具体的判断由本页按简单规则模拟，真实系统里由 LLM 根据提示词判断。</span></div>
   </div>
   <div class="callout tip"><span class="ttl">两层的分工</span>程序层回答“这条消息有没有资格让模型看一眼”。语义层回答“看了之后，值不值得做”。前者便宜、死板、可审计；后者灵活、贵、可以用自然语言随时改。</div>
   <div class="callout warn"><span class="ttl">注意明确请求</span>“仅响应明确请求”不等于“全部忽略”。设成这一档的来源，<a class="term" href="glossary.html#explicit-request">明确请求</a>（例如 @agent 帮我…）仍然能通过。</div>
@@ -122,23 +122,23 @@
 <!-- ============ 4 ============ -->
 <section class="lesson-sec" id="s4">
   <h2><span class="num">04</span>事件路由：订阅与直通</h2>
-  <p>过滤之后，事件要送到对的会话。这里有一个隐患：第 2 节的全局 Router 层负责维持跨信道的连续性。如果<b>已分配任务的每个后续事件</b>仍要经过 Router 转发，这个全局节点依然会承受大量负载，系统响应延迟也会被推高。</p>
+  <p>过滤之后，事件要送到对的会话。这里有一个隐患：第 2 节的全局 Router 层负责维持跨信道的连续性。如果<b>已分配任务的每个后续事件</b>仍要经过 Router 转发，这个全局节点依然会承受大量负载。系统的响应延迟也会升高。</p>
   <p>所以 Fast / Slow Path 同样适用于路由。全局 Router 只负责两件事：<b>新任务的冷启动</b>，和<b>跨任务协调</b>。已经确定归属的后续事件，由程序直接发给对应的 Worker，不经过 Router。</p>
 
   <h3>先认识 Thread</h3>
-  <p>在实际工作流中，同一个 GitHub Pull Request、同一个 IM 话题、同一封往来邮件串下的连续事件，构成一条事件流，原文叫 <b>Thread</b>。</p>
+  <p>实际工作流里，连续事件会形成一条事件流，原文叫 <b>Thread</b>。例如同一个 GitHub Pull Request、同一个 IM 话题或同一封往来邮件串下的事件。</p>
   <figure class="fig"><img src="img/fig06.jpg" alt="Thread 示例：同一个 IM 话题或同一个 GitHub Pull Request 下的连续 Trigger 构成一条 Thread"><figcaption><b>原文图 6</b>Thread 示例：同一个 IM 话题或同一个 GitHub Pull Request 下的连续 Trigger，构成一条 Thread。</figcaption></figure>
 
   <h3>两条路径</h3>
   <p>Router 根据某个 Thread 的初始事件创建 Worker Session 后，这个 Worker 直接订阅对应的 Thread。事件路由于是分成两条路径：</p>
   <div class="vs">
     <div><h4>已订阅 <span class="pill fast">Fast Path</span></h4><p>同一 Thread 的后续事件，由程序直通已订阅的 Worker。Router 不需要再调用工具转发。</p><p>新事件超出当前任务范围时，Worker 可以取消订阅，或交回 Router 重新分派。</p></div>
-    <div><h4>未订阅 <span class="pill slow">Slow Path</span></h4><p>Router 仍能观测所有事件，掌握全局状态。</p><p>但它只负责判断和分派<b>尚未被订阅</b>的新事件。</p></div>
+    <div><h4>未订阅 <span class="pill slow">Slow Path</span></h4><p>Router 仍能观测所有事件，掌握全局状态。</p><p>但它只负责判断和分派<b>还没有 Worker 订阅</b>的新事件。</p></div>
   </div>
   <figure class="fig"><img src="img/fig07.jpg" alt="订阅与直通：初始事件经由 Router 层创建 Worker 并建立订阅，同一 Thread 的后续事件直接发往该 Worker"><figcaption><b>原文图 7</b>订阅与直通：初始事件经由 Router 层创建 Worker 并建立订阅，同一 Thread 的后续事件直接发往该 Worker。</figcaption></figure>
 
   <h3>订阅是多对多的</h3>
-  <p>一个 Worker 可以同时订阅多个相关 Thread。同一个 Thread 也可以被多个 Worker 订阅。多个 Worker 在同一个工作环境或讨论里发生交集时，这个 Thread 的新事件会同时直通给所有订阅者。它们不需要点对点通信，也有机会获知彼此的操作，自行解决冲突。</p>
+  <p>一个 Worker 可以同时订阅多个相关 Thread。多个 Worker 也可以订阅同一个 Thread。多个 Worker 在同一个工作环境或讨论里发生交集时，这个 Thread 的新事件会同时直通给所有订阅者。它们不需要点对点通信，也有机会获知彼此的操作，自行解决冲突。</p>
   <p>输出侧不变：Worker 仍把关键结论汇报给 Router，由 Router 统一回复用户，并同步全局记忆。</p>
 
   <div class="chart-card" id="demo2">
@@ -153,7 +153,7 @@
       <ul class="msgs" id="d2-log"></ul>
     </div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d2-out"></div></div>
-    <div class="chart-foot">一条一条点“下一条事件”。注意三个时刻：①“日志贴在这里”这类后续事件直接走 Fast Path 到 W1；②W2 也订阅了 PR #101，于是 CI 失败的消息同时到了 W1 和 W2（多对多）；③“顺便改注册页”超出 W1 的任务范围，W1 把它交回 Router 重新分派。然后关掉“启用直通”再播一遍，比较 Router 要做的决定数。<br><span class="data-note">脚本是虚构的示例，用来演示原文 3.2 节的机制。Worker 自己打开 PR、订阅 Thread 是它的动作，不算 Trigger。</span></div>
+    <div class="chart-foot"><p style="margin:0">一条一条点“下一条事件”。注意三个时刻：</p><ol class="steps" style="margin:4px 0"><li>“日志贴在这里”这类后续事件直接走 Fast Path 到 W1。</li><li>W2 也订阅了 PR #101，于是 CI 失败的消息同时到了 W1 和 W2（多对多）。</li><li>“顺便改注册页”超出 W1 的任务范围，W1 把它交回 Router 重新分派。</li></ol><p style="margin:0">然后关掉“启用直通”再播一遍，比较 Router 要做的决定数。</p><span class="data-note">脚本是虚构的示例，用来演示原文 3.2 节的机制。Worker 自己打开 PR、订阅 Thread 是它的动作，不算 Trigger。</span></div>
   </div>
 </section>
 
@@ -173,7 +173,7 @@
   </ul>
   <blockquote class="src">这表明在实验负载下，直通机制不提高任务完成质量与速度，但为 Router Session 节省了可观的 token 与推理开销。<cite>§7.1</cite></blockquote>
   <div class="callout warn"><span class="ttl">读数字的限定</span>实验基于合成负载与简化环境（约 300 条消息、约 20 条工作请求，每种方案跑 5 次）。原文说结果“仅作为初步参考”。上面演示里的决定数增幅比 30% 大，是因为脚本里后续事件占比高；不要把演示数字当成实验结论。完整实验见 <a href="SA07-experiments.html">SA07</a>。</div>
-  <div class="callout note"><span class="ttl">补充：为什么不提速</span>原文 7.2 节的压测解释了这一点：Router 有批处理，峰值负载变大时也没触及单个 Router 的吞吐瓶颈（见 <a href="SA02-two-layer.html#s4">SA02</a>）。所以直通省下的是 Router 的推理和 token，而不是用户等待的时间。规模更大时，Router 离瓶颈更近，直通的意义可能更大——这是推论，原文没有测。</div>
+  <div class="callout note"><span class="ttl">补充：为什么不提速</span>原文 7.2 节的压测解释了这一点。Router 有批处理，峰值负载变大时也没触及单个 Router 的吞吐瓶颈（见 <a href="SA02-two-layer.html#s4">SA02</a>）。所以直通省下的是 Router 的推理和 token，而不是用户等待的时间。规模更大时，Router 离瓶颈更近，直通的意义可能更大——这是推论，原文没有测。</div>
 </section>
 
 <!-- ============ 6 ============ -->
@@ -197,7 +197,7 @@
   <div class="quiz" data-answer="1">
     <div class="q">原文消融实验中，去掉直通机制带来的主要变化是？</div>
     <div class="opts"><button>任务完成时间明显变长</button><button>完成时间基本不变，但 Router 决定增加约 30%，读缓存 token 增加约 37%</button><button>任务质量下降</button><button>Worker 之间开始互相通信</button></div>
-    <div class="explain">直通不提高完成质量与速度，但为 Router 节省了可观的 token 与推理开销：读缓存 token 从 2323 万增加到 3177 万。</div>
+    <div class="explain">直通不提高完成质量与速度。但它为 Router 节省了可观的 token 与推理开销：去掉直通后，读缓存 token 从 2323 万增加到 3177 万。</div>
   </div>
 
   <h3>速记表</h3>

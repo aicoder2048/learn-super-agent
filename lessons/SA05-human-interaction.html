@@ -64,7 +64,7 @@
     <div class="kp"><div class="k">问题一 · 交互方式 · §4.1</div><div class="v">别让后台阻塞前台</div><p>后台在跑耗时操作时，会话也要能随时接受新指令，不必等上一个命令或任务完成。解法：<b>异步 ReAct Loop</b>。</p></div>
     <div class="kp"><div class="k">问题二 · 交互渠道 · §4.2</div><div class="v">输出匹配信道</div><p>交互发生在用户熟悉的不同工作信道里。系统的输出方式要匹配这个信道的带宽和人的使用习惯。</p></div>
   </div>
-  <div class="callout note"><span class="ttl">补充：和第 2 课的关系</span>双层架构（<a href="SA02-two-layer.html">SA02</a>）解决的是“用户面对的始终是同一个 Agent”。但如果这一个 Agent 每做一件事就“失联”几分钟，或者把推理过程刷满群聊，用户仍然觉得它不好用。§4 补的就是这最后一公里。</div>
+  <div class="callout note"><span class="ttl">补充：和第 2 课的关系</span>双层架构（<a href="SA02-two-layer.html">SA02</a>）解决的是“用户面对的始终是同一个 Agent”。但这个 Agent 可能每做一件事就“失联”几分钟，也可能把推理过程刷满群聊。这样用户仍然觉得它不好用。§4 补的就是这最后一公里。</div>
 </section>
 
 <!-- ============ 2 ============ -->
@@ -73,7 +73,7 @@
   <p>在经典 ReAct Loop 中，模型发起一次<b>同步</b>的 <code>run()</code> 工具调用后，循环会阻塞。它要等工具执行完毕、返回最终结果，才进入下一步。在这期间，会话<b>无法响应任何新的用户输入</b>。</p>
   <p>这就是<a class="term" href="glossary.html#half-duplex">半双工</a>：像对讲机，一方说完，另一方才能说。要消除阻塞，就要把对话从一问一答的半双工模式，转变为<a class="term" href="glossary.html#full-duplex">全双工</a>模式。</p>
   <figure class="fig"><img src="img/fig10.jpg" alt="经典 ReAct Loop 与异步 ReAct Loop 对比"><figcaption><b>原文图 10</b>经典 ReAct Loop 与异步 ReAct Loop 对比：异步调用立即返回 Started 通知，后台工具运行期间仍可响应新消息。</figcaption></figure>
-  <div class="callout tip"><span class="ttl">看图要点</span>上半部分，中间那段虚线框“同步阻塞等待工具返回”就是用户被晾着的时间。下半部分，同样长的工具在后台跑，前台却插进了“用户消息 2 → LLM Call 即时回复”。工具完成后，结果作为“新消息投递”进来，再由一次 LLM Call 交付。</div>
+  <div class="callout tip"><span class="ttl">看图要点</span>上半部分中间的虚线框“同步阻塞等待工具返回”，就是用户干等的时间。下半部分，同样长的工具在后台跑，前台却插进了“用户消息 2 → LLM Call 即时回复”。工具完成后，结果作为“新消息投递”进来，再由一次 LLM Call 交付。</div>
 </section>
 
 <!-- ============ 3 ============ -->
@@ -95,21 +95,21 @@
       <label class="ctrl">消息 2 到达 = 工具开始后 <b id="d1-mv">5</b> 秒 <input id="d1-m" type="range" min="0" max="170" step="1" value="5"></label>
       <label class="ctrl"><input id="d1-stop" type="checkbox"> 消息 2 是“停下，改用方案 B”</label>
     </div>
-    <div class="legend"><span><i style="background:#3d7be8"></i>LLM 推理步</span><span><i style="background:#16a085"></i>工具在跑</span><span><i style="background:#8a94a3"></i>前台阻塞</span><span><i style="background:#d64541"></i>工具被 stop()</span><span><i style="background:#c9a227"></i>竖线：消息 2 到达</span></div>
+    <div class="legend"><span><i style="background:#3d7be8"></i>LLM 推理步</span><span><i style="background:#16a085"></i>工具在跑</span><span><i style="background:#8a94a3"></i>前台阻塞</span><span><i style="background:#d64541"></i>stop() 终止的工具</span><span><i style="background:#c9a227"></i>竖线：消息 2 到达</span></div>
     <div class="demo" id="d1-lanes"></div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
-    <div class="chart-foot" id="d1-foot">拖动“消息 2 到达”。经典版里，不管消息何时到，都要等工具跑完。异步版里，等待只取决于“当前推理步还剩多久”。把消息 2 拖到刚收到 Started 的那几秒里，你会看到异步版也要稍等——因为模型正在处理 Started 通知，新输入要等这一步结束。勾选“停下”，看 <code>stop()</code> 能省掉多少白跑的工具时间。<br><span class="data-note">简化模型：每个 LLM 推理步固定 4 秒；经典版在工具返回后，下一步同时看到结果和消息 2。数字只用来说明机制，不是原文实验。</span></div>
+    <div class="chart-foot" id="d1-foot">拖动“消息 2 到达”。经典版里，不管消息何时到，都要等工具跑完。异步版里，等待只取决于“当前推理步还剩多久”。<br>把消息 2 拖到刚收到 Started 的那几秒里。你会看到异步版也要稍等。原因是模型正在处理 Started 通知，新输入要等这一步结束。<br>勾选“停下”，看 <code>stop()</code> 能省掉多少白跑的工具时间。<br><span class="data-note">简化模型：每个 LLM 推理步固定 4 秒；经典版在工具返回后，下一步同时看到结果和消息 2。数字只用来说明机制，不是原文实验。</span></div>
   </div>
-  <div class="callout note"><span class="ttl">补充：熟悉的影子</span>这是操作系统和网络编程里“阻塞 I/O → 异步 I/O”的老路：发起读请求后不干等，先去处理别的事，数据到了再通过事件通知回来。<code>start()</code> 像提交一个异步请求，“结果作为新事件投递”像完成回调，<code>stop()</code> 像取消请求。这个类比是课程作者的解释。</div>
+  <div class="callout note"><span class="ttl">补充：熟悉的影子</span>这是操作系统和网络编程里“阻塞 I/O → 异步 I/O”的老路。程序发起读请求后不干等，先去处理别的事。数据到了，系统再用事件通知它。<code>start()</code> 像提交一个异步请求，“结果作为新事件投递”像完成回调，<code>stop()</code> 像取消请求。这个类比是课程作者的解释。</div>
 </section>
 
 <!-- ============ 4 ============ -->
 <section class="lesson-sec" id="s4">
   <h2><span class="num">04</span>多信道交互</h2>
   <p>先说结论：<b>不同工作信道的信息密度和交互习惯不同，系统的输出要与之匹配。</b></p>
-  <p>反面例子是：把面向单人终端的交互方式直接搬进群聊，把冗长的推理过程和密集的工具调用原样输出。在多人协作中，这极易造成信息过载。</p>
+  <p>反面例子是：把面向单人终端的交互方式直接搬进群聊。冗长的推理过程和密集的工具调用都原样输出。在多人协作中，这极易造成信息过载。</p>
   <div class="callout rule"><span class="ttl">双层架构已经解决了一半</span>具体任务中冗长的推理过程和密集的工具调用，都被隔离在 <a class="term" href="glossary.html#worker">Worker</a> Session 内部，不会直接输出到外部信道。对外交互由 <a class="term" href="glossary.html#router">Router 层</a>统一负责。</div>
-  <p>在此基础上，系统还要接入用户日常使用的各类工作环境，并<b>通过提示词</b>针对不同信道定制交互规范：</p>
+  <p>在此基础上，系统还要做两件事：接入用户日常使用的工作环境；<b>用提示词</b>为不同信道定制交互规范：</p>
   <div class="vs">
     <div><h4>IM 等即时通讯信道</h4><p>侧重<b>低打扰的轻量沟通</b>。</p><ul><li>像人类同事一样，只在需要决策或验收时发送通知。</li><li>只问直接问题，给简短结论。</li><li>原文验证过的一条简单有效的硬性规定：<b>单次回复不超过 100 词</b>。</li></ul></div>
     <div><h4>GitHub、邮件与文档等异步信道</h4><p>侧重<b>结构化、高信息密度的异步交付</b>。</p><ul><li>创建或更新 Pull Request 时，按项目规范写完整的问题背景、改动说明与验证结果。</li><li>个人助手场景下，直接起草结构化的邮件与文档摘要。</li></ul></div>
@@ -136,7 +136,7 @@
       </div>
     </div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d2-out"></div></div>
-    <div class="chart-foot">先看 IM：“仍在进行”时，正确做法是<b>不发消息</b>。再勾选“反面”，看终端式输出怎样一次违反好几条规范。最后切到 GitHub PR：同样的内容，那里需要的恰恰是完整、结构化的长文。<br><span class="data-note">词数口径：英文、数字、代码按空格和标点切分计词；中文没有空格，这里按“每 2 个汉字约 1 词”粗略折算。原文没有说明中文的计数口径，这只是演示用的近似。示例文本为虚构。</span></div>
+    <div class="chart-foot">先看 IM：情形选“仍在进行”时，正确做法是<b>不发消息</b>。<br>再勾选“反面”，看终端式输出怎样一次违反好几条规范。<br>最后切到 GitHub PR：同样的内容，那里需要的恰恰是完整、结构化的长文。<br><span class="data-note">词数口径：英文、数字、代码按空格和标点切分计词；中文没有空格，这里按“每 2 个汉字约 1 词”粗略折算。原文没有说明中文的计数口径，这只是演示用的近似。示例文本为虚构。</span></div>
   </div>
   <div class="callout tip"><span class="ttl">一句话记住</span>IM 里，Agent 像一个话少、靠谱的同事；GitHub 和邮件里，它像一个写文档很认真的同事。同一个 Router，靠提示词切换这两种“人设”。</div>
 </section>
@@ -150,9 +150,9 @@
     <div class="explain">原文 §4.1：调用 start() 后立即收到 Started；后台工具完成后，系统再把最终结果作为一条新的事件消息投递进会话。</div>
   </div>
   <div class="quiz" data-answer="1">
-    <div class="q">异步 ReAct Loop 下，用户的新输入什么时候被处理？</div>
+    <div class="q">异步 ReAct Loop 下，Agent 什么时候处理用户的新输入？</div>
     <div class="opts"><button>立刻打断正在进行的 LLM 推理</button><button>在当前推理步结束后即被处理，不必等待后台工具完成</button><button>等后台工具全部完成后</button><button>由 Watchdog 定时转交</button></div>
-    <div class="explain">原文原话：“新输入在当前推理步结束后即被处理，不必等待后台工具完成。”它不打断正在进行的推理步。</div>
+    <div class="explain">原文原话：“新输入在当前推理步结束后即被处理，不必等待后台工具完成。”它不打断当前的推理步。</div>
   </div>
   <div class="quiz" data-answer="3">
     <div class="q">关于异步任务机制在 DeepSeek Harness 中的状态，原文怎么说？</div>

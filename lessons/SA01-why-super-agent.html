@@ -80,7 +80,7 @@
     <div class="legend"><span><i style="background:#3d7be8"></i>Agent 在干活</span><span><i style="background:#d64541"></i>Agent 停着等你</span><span><i style="background:#e8a33d"></i>你在处理这个 Session</span></div>
     <div class="demo" id="d1-lanes"></div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
-    <div class="chart-foot" id="d1-foot">把 Session 数从 1 往上拖。前几档，总产出几乎按比例增长。到了某个点，<b>你</b>的时间被占满（利用率接近 100%），再加 Session，只会让更多 Agent 停着等你。再把“Agent 每次独立工作”调长（模型更强），你会发现这个上限跟着变大。<br><span class="data-note">简化模型：模拟 2 小时；每次处理 1.5 分钟；Agent 工作时长在设定值的 50%–150% 之间随机；你按先来先服务处理。图中只画前 60 分钟。数字只用来说明机制，不是原文实验。</span></div>
+    <div class="chart-foot" id="d1-foot">把 Session 数从 1 往上拖。前几档，总产出几乎按比例增长。到了某个点，<b>你</b>的时间全部占满（利用率接近 100%）。这时再加 Session，只会让更多 Agent 停着等你。<br>再把“Agent 每次独立工作”调长（模型更强）。你会发现这个上限跟着变大。<br><span class="data-note">简化模型：模拟 2 小时；每次处理 1.5 分钟；Agent 工作时长在设定值的 50%–150% 之间随机；你按先来先服务处理。图中只画前 60 分钟。数字只用来说明机制，不是原文实验。</span></div>
   </div>
 
   <div class="callout note"><span class="ttl">补充：为什么是 3–5 个</span>在默认参数下，每个 Session 每轮占用你约 2.5 分钟（处理 1.5 + 切换 1），每轮约 10 分钟。你的时间大约能撑起 4 个 Session。这和原文观察到的“3 到 5 个”在同一量级。模型越能独立工作，这个数越大；切换代价越高，这个数越小。</div>
@@ -126,7 +126,7 @@
 <!-- ============ 6 ============ -->
 <section class="lesson-sec" id="s6">
   <h2><span class="num">06</span>五个模块：全景图</h2>
-  <p>原文的核心判断是：<b>相似的设计约束会导出相似的架构选择。</b>不管是个人助手，还是软件开发场景的 Agent，只要目标是“持续在线、并发响应环境事件”，底层就可能采用相近的架构。这些问题和传统计算机系统长期讨论的问题高度相似，所以很多经典设计思想可以直接借用。</p>
+  <p>原文的核心判断是：<b>相似的设计约束会导出相似的架构选择。</b>个人助手也好，软件开发场景的 Agent 也好，目标都是“持续在线、并发响应环境事件”。目标相同，底层就可能采用相近的架构。这些问题和传统计算机系统长期讨论的问题高度相似。所以，很多经典设计思想可以直接借用。</p>
   <figure class="fig"><img src="img/fig03.jpg" alt="Super-agent 整体系统架构"><figcaption><b>原文图 3</b>Super-agent 整体系统架构。标号 [2] 至 [6] 对应原文第 2 至第 6 节。</figcaption></figure>
 
   <div class="chart-card" id="demo2">
@@ -176,7 +176,7 @@
     <tr><td>[5] 计算、状态与环境的分离（§5）</td><td>持久</td><td><a class="term" href="glossary.html#compute-storage-separation">存算分离</a></td><td><a href="SA06-separation-watchdog.html">SA06</a></td></tr>
     <tr><td>[6] Watchdog（§6）</td><td>持久</td><td>外部 <a class="term" href="glossary.html#control-loop">Control Loop</a></td><td><a href="SA06-separation-watchdog.html#s5">SA06</a></td></tr>
   </table></div>
-  <div class="callout note"><span class="ttl">补充：怎样读这张表</span>“借用的经典系统思想”一列综合了原文各节的表述。原文在结语里明确说：“我们并没有提出全新的理论，而是将计算机系统中经典的工程思想应用到了 Agent 系统的构建中。”带着这张表读后面各课，你会发现每个模块都能在操作系统、数据库或 CPU 设计里找到“前辈”。</div>
+  <div class="callout note"><span class="ttl">补充：怎样读这张表</span>“借用的经典系统思想”一列综合了原文各节的表述。原文在结语里明确说：“我们并没有提出全新的理论，而是将计算机系统中经典的工程思想应用到了 Agent 系统的构建中。”带着这张表读后面各课。你会发现：每个模块都能在操作系统、数据库或 CPU 设计里找到“前辈”。</div>
 </section>
 
 <!-- ============ 7 ============ -->
@@ -190,12 +190,12 @@
   <div class="quiz" data-answer="1">
     <div class="q">下面哪一项<b>不是</b>原文列出的“简单扩展”方案（在本地单会话 Agent 上接 CLI/MCP/连接器）的问题？</div>
     <div class="opts"><button>单会话同步阻塞</button><button>模型不会调用工具</button><button>多任务上下文混乱</button><button>本地设备离线即停止运行</button></div>
-    <div class="explain">原文列的三个问题是：单会话同步阻塞、多任务上下文混乱、本地设备离线即停止运行。模型调用工具的能力已经被单任务 Agent 证明了。</div>
+    <div class="explain">原文列的三个问题是：单会话同步阻塞、多任务上下文混乱、本地设备离线即停止运行。单任务 Agent 已经证明了模型调用工具的能力。</div>
   </div>
   <div class="quiz" data-answer="3">
     <div class="q">“主动”这个特征的完整含义是？</div>
     <div class="opts"><button>收到消息后尽快回复</button><button>每完成一步就通知用户</button><button>同时执行尽可能多的任务</button><button>持续观察环境事件，主动推进值得处理的事；不需要介入时保持安静</button></div>
-    <div class="explain">主动包括两半：自己发现值得做的事，以及没事时不打扰人。后者常被忽略。</div>
+    <div class="explain">主动包括两半：自己发现值得做的事，以及没事时不打扰人。人们常常忽略后者。</div>
   </div>
   <div class="quiz" data-answer="0">
     <div class="q">“持久”这个特征主要由哪两个模块支撑？</div>

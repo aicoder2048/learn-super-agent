@@ -91,14 +91,14 @@
     <li><b>容器可替换</b>：无状态容器可以水平扩展、重启或替换。会话和任务的连续性由持久化存储保障。</li>
   </ol>
   <blockquote class="src">无状态计算容器可以水平扩展、重启或替换，会话与任务的连续性则由持久化存储保障，从而使 Agent 摆脱单台本地设备的生命周期限制，实现云端持久在线。<cite>§5.1</cite></blockquote>
-  <div class="callout note"><span class="ttl">补充：存算分离的“前辈”</span>云数据库（例如 Snowflake、Aurora）把查询计算节点和存储层分开：计算节点随用随开，数据始终在共享存储里。Web 后端也常这样做：应用服务器无状态，会话放进 Redis 或数据库，任何一台服务器都能接着处理同一个用户。原文把同样的思路用到 Agent Loop 上。</div>
+  <div class="callout note"><span class="ttl">补充：存算分离的“前辈”</span>云数据库（例如 Snowflake、Aurora）把查询计算节点和存储层分开。计算节点随用随开，数据始终在共享存储里。<br>Web 后端也常这样做。应用服务器不保存状态，会话放进 Redis 或数据库。这样任何一台服务器都能接着处理同一个用户。<br>原文把同样的思路用到 Agent Loop 上。</div>
 </section>
 
 <!-- ============ 3 ============ -->
 <section class="lesson-sec" id="s3">
   <h2><span class="num">03</span>第二步：计算与执行环境分离</h2>
   <p>Agent Loop 和会话状态上云之后，新问题来了：任务需要的执行环境在哪里？</p>
-  <p>原文的一个重要观点：模型工作所需的上下文，很大一部分要通过工具调用，从代码仓库、本地文件、依赖服务等执行环境中获取。<b>从这个意义上说，广义的上下文也包含执行环境本身。</b></p>
+  <p>原文有一个重要观点。模型工作所需的上下文，很大一部分来自执行环境：代码仓库、本地文件、依赖服务等。模型要通过工具调用去取。<b>从这个意义上说，广义的上下文也包含执行环境本身。</b></p>
 
   <h3>两种常见思路，为什么不理想</h3>
   <div class="vs">
@@ -113,7 +113,7 @@
     <li><b><a class="term" href="glossary.html#byom">BYOM</a>（Bring Your Own Machine）</b>：把你日常用的开发机或个人电脑接入云端 Agent。</li>
     <li><b>云端托管机器或按需创建的计算环境</b>：同样用 daemon 接入。</li>
   </ul>
-  <p>结果是：一个 Agent 不再受限于单台机器。它可以在不同执行设备之间切换，按任务需要选环境。它甚至支持<b>间歇在线的设备</b>：某台个人设备重新上线后，云端 Agent 自动触发并完成需要在那台设备上执行的任务。</p>
+  <p>结果是：一个 Agent 不再受限于单台机器。它可以在不同执行设备之间切换，按任务需要选环境。它甚至支持<b>间歇在线的设备</b>。某台个人设备重新上线后，云端 Agent 会自动触发那台设备上的任务，并完成它们。</p>
 
   <h3>与 Anthropic“脑手分离”的异同</h3>
   <div class="tbl-wrap"><table class="tbl">
@@ -122,7 +122,7 @@
     <tr><td>场景</td><td>托管服务</td><td>首先接入用户日常使用的个人机器</td></tr>
     <tr><td>执行环境</td><td>按需创建的沙箱、客户 VPC 内的资源</td><td>可能间歇在线的个人机器，上面有未提交的修改和本地凭据</td></tr>
   </table></div>
-  <div class="callout warn"><span class="ttl">代价：信任前提</span>这套设计默认云端与端侧环境<b>彼此受信任</b>。原文在 §8.4 专门讨论了它的安全隐患：一旦云端 Agent Loop 被攻破，所有连接的端侧设备都面临风险。详见 <a href="SA09-open-problems.html">SA09</a>。</div>
+  <div class="callout warn"><span class="ttl">代价：信任前提</span>这套设计默认云端与端侧环境<b>彼此受信任</b>。原文在 §8.4 专门讨论了它的安全隐患。攻击者一旦攻破云端 Agent Loop，所有连接的端侧设备都面临风险。详见 <a href="SA09-open-problems.html">SA09</a>。</div>
 </section>
 
 <!-- ============ 4 ============ -->
@@ -150,7 +150,7 @@
       <div class="tbl-wrap"><table class="tbl task-tbl" id="d1-tasks"></table></div>
     </div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
-    <div class="chart-foot">先选“① 本地单机”，点“笔记本合盖”：所有任务都停。再换成“③ 两步都做”，重复一次：Agent 仍在线，只有依赖笔记本的任务排队等它回来。最后点“个人设备上线”，看排队的任务被自动触发。<br><span class="data-note">简化演示：三种方式的行为依据原文 §5 的文字描述整理，不是原文实验。“② 沙箱重建”对应原文 §5.2 列出的第一种常见思路。</span></div>
+    <div class="chart-foot">先选“① 本地单机”，点“笔记本合盖”：所有任务都停。再换成“③ 两步都做”，重复一次：Agent 仍在线，只有依赖笔记本的任务排队等它回来。最后点“个人设备上线”，看排队的任务自动开始。<br><span class="data-note">简化演示：三种方式的行为依据原文 §5 的文字描述整理，不是原文实验。“② 沙箱重建”对应原文 §5.2 列出的第一种常见思路。</span></div>
   </div>
 </section>
 
@@ -167,7 +167,7 @@
     <div class="kp"><div class="k">怎么驱动</div><div class="v">定时消息</div><p>Watchdog Session 由定时消息驱动，构成主系统外部的 Control Loop。</p></div>
     <div class="kp"><div class="k">看什么</div><div class="v">基础设施 + 任务进展</div><p>处理接口报错、状态恢复失败等基础设施故障。由模型判断各个 Worker 是否有实质进展、方向是否偏离整体目标。</p></div>
     <div class="kp"><div class="k">怎么处理</div><div class="v">介入修复 / 持续复查</div><p>发现异常时及时介入修复。遇到外部偶发故障，则持续复查直至恢复正常。</p></div>
-    <div class="kp"><div class="k">额外好处</div><div class="v">能对话的运维</div><p>Watchdog 本身是具备完整工具能力的 Agent Session。维护者可以用自然语言问它故障原因，也可以让它在线修正主系统，例如增删提示词、调整触发规则。</p></div>
+    <div class="kp"><div class="k">额外好处</div><div class="v">能对话的运维</div><p>Watchdog 本身是具备完整工具能力的 Agent Session。维护者可以用自然语言问它故障原因。也可以让它在线修正主系统，例如增删提示词、调整触发规则。</p></div>
   </div>
 
   <div class="chart-card" id="demo2">
@@ -186,10 +186,10 @@
       <div id="d2-lanes"></div>
     </div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d2-out"></div></div>
-    <div class="chart-foot">切换两种监控方式对比。“无效循环”和“偏离目标”时，进程活着、也不报错，存活探测发现不了，任务一直空转到结束。Watchdog 由模型比较前后两次检查的进展，所以能发现。外部偶发故障修不了，Watchdog 就每次定时检查时复查，等外部恢复后马上让任务继续。<br><span class="data-note">简化模型：模拟 70 分钟。Watchdog 发现基础设施故障后 2 分钟修好；发现“无效循环”需要连续两次检查都没有进展；发现“偏离目标”需要故障出现至少 5 分钟、产出足够判断。外部故障在第 50 分钟自行恢复。数字只用来说明机制，不是原文实验。</span></div>
+    <div class="chart-foot">切换两种监控方式对比。<br>出现“无效循环”和“偏离目标”时，进程活着，也不报错。存活探测发现不了，任务一直空转到结束。Watchdog 由模型比较前后两次检查的进展，所以能发现。<br>外部偶发故障修不了。Watchdog 就在每次定时检查时复查，外部恢复后马上让任务继续。<br><span class="data-note">简化模型：模拟 70 分钟。Watchdog 发现基础设施故障后 2 分钟修好；发现“无效循环”需要连续两次检查都没有进展；发现“偏离目标”需要故障出现至少 5 分钟、产出足够判断。外部故障在第 50 分钟自行恢复。数字只用来说明机制，不是原文实验。</span></div>
   </div>
 
-  <div class="callout note"><span class="ttl">补充：看门狗与控制器</span>“Watchdog”一词来自硬件看门狗定时器：程序要定时“喂狗”，超时没喂，就判定系统卡死并强制复位。Kubernetes 的控制器是另一个熟悉的 Control Loop：不断比较“期望状态”和“实际状态”，有差距就纠正。原文的 Watchdog 更进一步：它让模型来判断“实际状态”里任务有没有真正进展。</div>
+  <div class="callout note"><span class="ttl">补充：看门狗与控制器</span>“Watchdog”一词来自硬件看门狗定时器。程序要定时“喂狗”。超时没喂，定时器就判定系统卡死，并强制复位。Kubernetes 的控制器是另一个熟悉的 Control Loop：不断比较“期望状态”和“实际状态”，有差距就纠正。原文的 Watchdog 更进一步：它让模型来判断“实际状态”里任务有没有真正进展。</div>
   <div class="callout tip"><span class="ttl">实战提示</span>为什么 Watchdog 要放在主系统<b>之外</b>？如果它跑在 Router 或某个 Worker 里，主系统卡死时它也一起卡死。独立的会话 + 独立的定时触发，才能在主系统失灵时仍然工作。</div>
 </section>
 

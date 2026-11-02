@@ -74,8 +74,8 @@
   <p>先说结论：注入太多和太少都有代价。要找的是中间那个点。</p>
   <p>在单 Session Agent 里，输入主要是人写的提示词，数量有限。在 Super-agent 里，输入换成了环境持续产生的半结构化事件（<a class="term" href="glossary.html#trigger">Trigger</a>）。所以，工具调用和事件注入的<b>结构设计</b>变得更重要。</p>
   <div class="vs">
-    <div><h4>注入过多</h4><p class="bad">挤占窗口，稀释模型注意力。</p><p>无关的历史和别的任务的细节，会把真正要看的信息淹没。</p></div>
-    <div><h4>注入过少</h4><p class="bad">模型被迫反复调用工具去读。</p><p>每一次读取都是一次往返，执行步数增加，响应变慢。</p></div>
+    <div><h4>注入过多</h4><p class="bad">挤占窗口，稀释模型注意力。</p><p>无关历史和其他任务的细节太多，模型就找不到真正要看的信息。</p></div>
+    <div><h4>注入过少</h4><p class="bad">模型只好反复调用工具去读。</p><p>每一次读取都是一次往返，执行步数增加，响应变慢。</p></div>
   </div>
   <blockquote class="src">浪费上下文窗口，就是浪费模型的智能。<cite>§3.3</cite></blockquote>
   <p>原文的解法是：把有限的<a class="term" href="glossary.html#context-window">上下文窗口</a>当作 <a class="term" href="glossary.html#context-as-cache">Cache</a> 来管理。</p>
@@ -89,9 +89,9 @@
     <div class="kp"><div class="k">操作一</div><div class="v">Inline（内联）</div><p>把近期很可能用到的信息，直接放进当前上下文窗口。好处：省去一次额外的工具调用往返。</p></div>
     <div class="kp"><div class="k">操作二</div><div class="v">Spill（溢出）</div><p>超出窗口预算或低频使用的完整信息，留在窗口之外。窗口里只保留引用或摘要，模型需要时再按需读取。</p></div>
   </div>
-  <p>决定“近期很可能用到什么”的依据，是经典的<a class="term" href="glossary.html#locality">局部性</a>（Locality）思想：和当前对象紧密关联的、时间或空间上相邻的信息，最可能马上被用到。</p>
+  <p>怎样判断“近期可能用到什么”？靠经典的<a class="term" href="glossary.html#locality">局部性</a>（Locality）思想。和当前对象紧密关联的信息，接下来最可能用到。时间或空间上相邻的信息也是这样。</p>
   <div class="callout note"><span class="ttl">补充：这几个词从哪来</span>
-    <b>Cache 与局部性</b>：CPU 缓存只存一小部分数据，却能命中大部分访问，靠的就是“刚用过的和挨着的，接下来还会用”。<br>
+    <b>Cache 与局部性</b>：CPU 缓存只存一小部分数据，却能命中大部分访问。它靠的是一条规律：刚用过的数据和它旁边的数据，接下来还会用。<br>
     <b>Inline</b>：编译器把一个小函数的函数体直接抄进调用处，省掉一次函数调用的开销。对应这里“省掉一次工具调用往返”。<br>
     <b>Spill</b>：寄存器不够用时，编译器把变量“溢出”到内存，只在需要时再读回来。对应这里“完整内容留在窗口外，保留续读入口”。<br>
     这些类比是课程作者的解释；原文只说“借用编译优化与计算机系统中的概念”。</div>
@@ -103,7 +103,7 @@
   <p>原文给出了用 Inline &amp; Spill 逐步优化事件注入的三步。</p>
   <ol class="steps">
     <li><b>从最少信息开始：</b>最初只提供当前对象的 ID 和内容摘要。</li>
-    <li><b>利用局部性逐步 Inline 关联信息：</b>先附上紧密关联对象的 ID，再附带时空相邻的内容。例如：内容前 50 字、IM 消息的前后相邻消息与所回复的消息，或代码评论所在评审讨论中的相邻评论。</li>
+    <li><b>利用局部性逐步 Inline 关联信息：</b>先附上紧密关联对象的 ID，再附带时空相邻的内容。例如：<ul><li>内容前 50 字；</li><li>IM 消息的前后相邻消息和它回复的消息；</li><li>代码评论所在评审讨论里的相邻评论。</li></ul></li>
     <li><b>超出上限则 Spill：</b>对无法全部 Inline 的长内容设定较小的长度上限，把超出部分 Spill 到窗口外。一种简单直接的做法是：截断超出部分，并保留续读入口。模型需要完整内容时，再调用工具读取。</li>
   </ol>
   <p>下面的演示里，群聊中有人发来一条新消息，系统要把它注入一个 Worker 的上下文。拖动“上下文预算”，看三步法如何决定哪些信息进窗口。</p>
@@ -124,10 +124,10 @@
       <div class="data-note">注入字数（占预算）</div><div class="bar2"><i id="d1-bar"></i></div>
       <div class="readout" id="d1-out"></div>
     </div>
-    <div class="chart-foot">从 20 字往上拖。预算太小时，只有 ID 和摘要进窗口，<b>需要的信息都要靠工具去读</b>，额外调用多。预算适中时，紧密关联的信息被内联，长内容被截断并留下续读入口，调用数降到很低。预算拉满时，连整段 Thread 历史都塞了进来：调用数不再减少，<b>无关字数却猛增</b>，这就是“稀释注意力”。<br><span class="data-note">简化模型：按优先级贪心放入；可截断的长内容最多截到 50 字（Spill），其余放不下就只留引用。每缺一条 ★ 信息、或 ★ 信息被截断，记 1 次额外工具调用。字数是示意值，不是原文数据。</span></div>
+    <div class="chart-foot">从 20 字往上拖。<br>预算太小时，只有 ID 和摘要进窗口。<b>需要的信息都要靠工具去读</b>，额外调用多。<br>预算适中时，系统内联紧密关联的信息，把长内容截断并留下续读入口。调用数降到很低。<br>预算拉满时，整段 Thread 历史也塞了进来。调用数不再减少，<b>无关字数却猛增</b>。这就是“稀释注意力”。<br><span class="data-note">简化模型：按优先级贪心放入；可截断的长内容最多截到 50 字（Spill），其余放不下就只留引用。每缺一条 ★ 信息，或截断一条 ★ 信息，记 1 次额外工具调用。字数是示意值，不是原文数据。</span></div>
   </div>
 
-  <div class="callout tip"><span class="ttl">看演示要点</span>三步法的顺序本身就是一种 Cache 替换策略：越可能用到的越先放；放不下的长内容不是丢掉，而是“截断 + 留续读入口”。模型从不会因为信息被 Spill 而失去它，只是要多付一次读取。</div>
+  <div class="callout tip"><span class="ttl">看演示要点</span>三步法的顺序本身就是一种 Cache 替换策略：越可能用到的越先放；放不下的长内容不是丢掉，而是“截断 + 留续读入口”。信息 Spill 到窗口外，模型并没有失去它，只是要多读一次。</div>
 </section>
 
 <!-- ============ 4 ============ -->
@@ -141,7 +141,7 @@
   <p>原文的回答是：把 Inline &amp; Spill <b>一致地</b>应用到系统中的各类对象上。这样就自然得到一种按需展开的多跳检索机制——<a class="term" href="glossary.html#chain-of-recall">链式召回</a>（Chain of Recall）。</p>
   <div class="callout rule"><span class="ttl">机制</span>系统为 Trigger、Thread 和 Worker Session 等对象赋予唯一 ID，并在注入时内联紧密关联对象的 ID，使这些对象在底层构成一张引用图。每次召回的对象本身也遵循 Inline &amp; Spill，返回结果中又内联下一跳关联对象的摘要与 ID。</div>
   <figure class="fig"><img src="img/fig08.jpg" alt="链式召回示意：Trigger #42 内联 thread_id #08 与 worker_id #03，逐跳读取 Thread #08、Worker #03、Thread #15"><figcaption><b>原文图 8</b>链式召回：每次召回的对象均内联下一跳关联对象的 ID，支持沿引用关系逐跳展开上下文。</figcaption></figure>
-  <p>原文的例子：从一条当前消息读取所在 Thread，再从 Thread 内联的 ID 追踪到相关的 Worker Session，进而找到该 Worker 关联的另一个代码评审 Thread。下面的演示把这个过程做成可以点的。</p>
+  <p>原文的例子分三跳：</p><ol class="steps"><li>从当前消息读取它所在的 Thread。</li><li>从 Thread 内联的 ID 找到对应的 Worker Session。</li><li>从这个 Worker 找到它关联的另一个代码评审 Thread。</li></ol><p>下面的演示把这个过程做成可以点的。</p>
 
   <div class="chart-card" id="demo2">
     <div class="chart-head">
@@ -174,7 +174,7 @@
       </div>
     </div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d2-out"></div></div>
-    <div class="chart-foot" id="d2-foot">点亮的方框是“已读到”的对象，虚线框是“当前上下文里已有它的 ID、可以读”的下一跳。灰掉的方框，Router 现在还不知道它存在。顺着 ID 点下去，看 Router 用几跳就能回答问题。<br><span class="data-note">示例对象和内容是虚构的，结构依照原文图 8 与 §3.3 的描述。</span></div>
+    <div class="chart-foot" id="d2-foot">点亮的方框是“已读到”的对象。虚线框是下一跳：上下文里已有它的 ID，可以去读。灰掉的方框，Router 现在还不知道它存在。顺着 ID 点下去，看 Router 用几跳就能回答问题。<br><span class="data-note">示例对象和内容是虚构的，结构依照原文图 8 与 §3.3 的描述。</span></div>
   </div>
   <div class="callout tip"><span class="ttl">链式召回的关键</span>没有一个“中心索引”。线索就分散在每个对象里：每个对象都内联了邻居的 ID 和摘要。模型拿着当前事件，像顺藤摸瓜一样往外走，需要几跳就走几跳。原文说，这缓解了 Router 层在长程运行中丢失先前信息的问题。</div>
   <div class="callout warn"><span class="ttl">局限</span>链式召回主要解决<b>近期</b>任务与会话历史的按需检索。原文在 §8.1 承认：运行周期拉长到跨月甚至更长时，长程记忆会成为可扩展性的主要瓶颈。见 <a href="SA09-open-problems.html">SA09</a>。</div>
@@ -187,10 +187,10 @@
   <div class="callout rule"><span class="ttl">原文思路</span>借鉴计算机系统中的投机执行（Speculative Execution）思想：Agent 可以在还不确定结果是否会被采用时，根据环境信号在后台提前尝试，通过消耗额外的后台算力来减少人类的等待与介入成本。结果有价值就交付，没有价值就丢弃。</div>
   <p>原文给了两个场景：</p>
   <div class="grid-2">
-    <div class="kp"><div class="k">个人助手场景</div><div class="v">会议邀约</div><p>收到会议邀约邮件或待办消息时，Agent 先在后台核对日程冲突、搜集相关背景资料、备好回复草稿。用户过目后直接确认发出。</p></div>
-    <div class="kp"><div class="k">研发协作场景</div><div class="v">静默复现并修复</div><p>原文在 DeepSeek Harness 内部用户群里配置了这条策略：群里有人反馈问题或讨论改动方案时，Agent 先在后台尝试复现、寻找修复方案。<b>只有确认问题并找到简单修复方案后</b>，才把结果交付给用户；否则全程保持安静。</p></div>
+    <div class="kp"><div class="k">个人助手场景</div><div class="v">会议邀约</div><p>Agent 收到会议邀约邮件或待办消息。它先在后台做三件事：核对日程冲突、搜集背景资料、备好回复草稿。用户过目后直接确认发出。</p></div>
+    <div class="kp"><div class="k">研发协作场景</div><div class="v">静默复现并修复</div><p>DeepSeek Harness 团队在内部用户群里配置了这条策略。群里有人反馈问题或讨论改动方案时，Agent 先在后台尝试复现，并寻找修复方案。<b>只有确认问题并找到简单修复方案后</b>，才把结果交付给用户；否则全程保持安静。</p></div>
   </div>
-  <figure class="fig"><img src="img/fig09.jpg" alt="群里讨论波浪号被渲染成删除线时，Super-agent 已提交修复 Pull Request"><figcaption><b>原文图 9</b>投机执行示例：用户报告波浪号被渲染成删除线。群内还在讨论“该在训练中解决，还是改渲染规则”时，Super-agent 已在后台提交了修复 Pull Request，并能回答修改依据。</figcaption></figure>
+  <figure class="fig"><img src="img/fig09.jpg" alt="群里讨论波浪号被渲染成删除线时，Super-agent 已提交修复 Pull Request"><figcaption><b>原文图 9</b>投机执行示例：用户报告波浪号渲染成了删除线。群里还在讨论“该在训练中解决，还是改渲染规则”。这时 Super-agent 已在后台提交了修复 Pull Request，并能回答修改依据。</figcaption></figure>
 
   <div class="chart-card" id="demo3">
     <div class="chart-head">
@@ -204,9 +204,9 @@
     </div>
     <div class="demo" id="d3-lanes"></div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d3-out"></div></div>
-    <div class="chart-foot" id="d3-foot">关掉“投机执行”，对比同一件事的时间线。开启时，Agent 用后台算力去“赌”一次；赌中了，人等待的时间大幅缩短；赌不中，结果被丢弃，群里一条消息都不多。<br><span class="data-note">简化模型：时间单位是分钟，数值是示意。关闭投机执行时，假设讨论结束后有人 @agent，Agent 再开始同样的工作。</span></div>
+    <div class="chart-foot" id="d3-foot">关掉“投机执行”，对比同一件事的时间线。开启时，Agent 用后台算力去“赌”一次。赌中了，人等待的时间大幅缩短。赌不中，Agent 丢弃结果，群里一条消息都不多。<br><span class="data-note">简化模型：时间单位是分钟，数值是示意。关闭投机执行时，假设讨论结束后有人 @agent，Agent 再开始同样的工作。</span></div>
   </div>
-  <div class="callout note"><span class="ttl">补充：CPU 里的投机执行</span>CPU 遇到条件分支时，不等条件算出来，就先猜一个方向往下执行。猜对了，结果直接用，省下等待；猜错了，把算出来的结果全部丢弃，从正确的分支重来。代价是做了一些“白干”的计算。Super-agent 的版本完全同构：用后台算力换人的等待，猜错就丢弃，<b>不能让错误的结果“泄露”出去</b>——对应到这里，就是不发出无用的消息。</div>
+  <div class="callout note"><span class="ttl">补充：CPU 里的投机执行</span>CPU 遇到条件分支时，不等条件算出来，就先猜一个方向往下执行。猜对了，结果直接用，省下等待；猜错了，把算出来的结果全部丢弃，从正确的分支重来。代价是做了一些“白干”的计算。<br>Super-agent 的做法结构相同：用后台算力换人的等待，猜错就丢弃。关键是<b>不能让错误的结果“泄露”出去</b>。在这里，就是不发出无用的消息。</div>
   <div class="callout warn"><span class="ttl">常见误解</span>投机执行不是“想到什么就往群里发什么”。“静默复现并修复”的精髓在于<b>交付门槛</b>：确认问题、修复简单，两条都满足才说话。它和 <a href="SA01-why-super-agent.html#s5">SA01</a> 讲的“主动 = 做值得做的事 + 没事保持安静”是一回事。这条策略本身是写在语义层里的（见 <a href="SA03-event-filter-route.html">SA03</a> 的两级过滤）。</div>
 </section>
 
