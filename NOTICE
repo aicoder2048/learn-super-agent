@@ -1,0 +1,10 @@
+learn-deepseek-super-agent
+Copyright (c) 2026 aicoder2048
+
+The MIT license in LICENSE covers the course pages, scripts and documentation written
+for this repository. It does not cover:
+  - the original article "Super-agent 设计探索：迈向更自主的 Agent 系统" and its
+    figures (copyright DeepSeek; not distributed here, fetched locally by
+    lessons/tools/fetch_article.py);
+  - docs/articles/prototype-docs/, which is from deepseek-ai/dsh-superagent-prototype
+    and stays under its own MIT license (see docs/articles/prototype-docs/LICENSE).

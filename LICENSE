@@ -19,12 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-Scope: this license covers the course pages, scripts and documentation written
-for this repository. It does not cover:
-  - the original article "Super-agent 设计探索：迈向更自主的 Agent 系统" and its
-    figures (copyright DeepSeek; not distributed here, fetched locally by
-    lessons/tools/fetch_article.py);
-  - docs/articles/prototype-docs/, which is from deepseek-ai/dsh-superagent-prototype
-    and stays under its own MIT license (see docs/articles/prototype-docs/LICENSE).

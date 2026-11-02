@@ -129,4 +129,4 @@ uv run --no-project --with playwright python tools/check_page.py index.html glos
 
 ## 许可证
 
-本仓库的课程页面、脚本和文档采用 [MIT 许可证](LICENSE)。许可证不覆盖原文和原图（版权归 DeepSeek，不在本仓库中），也不覆盖 `docs/articles/prototype-docs/`（沿用原型自己的 MIT 许可证）。
+本仓库的课程页面、脚本和文档采用 [MIT 许可证](LICENSE)。许可证不覆盖原文和原图（版权归 DeepSeek，不在本仓库中），也不覆盖 `docs/articles/prototype-docs/`（沿用原型自己的 MIT 许可证）。范围说明见 [NOTICE](NOTICE)。
