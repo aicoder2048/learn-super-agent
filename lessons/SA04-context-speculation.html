@@ -124,7 +124,7 @@
       <div class="data-note">注入字数（占预算）</div><div class="bar2"><i id="d1-bar"></i></div>
       <div class="readout" id="d1-out"></div>
     </div>
-    <div class="chart-foot">从 20 字往上拖。<br>预算太小时，只有 ID 和摘要进窗口。<b>需要的信息都要靠工具去读</b>，额外调用多。<br>预算适中时，系统内联紧密关联的信息，把长内容截断并留下续读入口。调用数降到很低。<br>预算拉满时，整段 Thread 历史也塞了进来。调用数不再减少，<b>无关字数却猛增</b>。这就是“稀释注意力”。<br><span class="data-note">简化模型：按优先级贪心放入；可截断的长内容最多截到 50 字（Spill），其余放不下就只留引用。每缺一条 ★ 信息，或截断一条 ★ 信息，记 1 次额外工具调用。字数是示意值，不是原文数据。</span></div>
+    <div class="chart-foot">从 20 字往上拖。<br>预算太小时，只有 ID 和摘要进窗口。<b>需要的信息都要靠工具去读</b>，额外调用多。<br>预算适中时，系统内联紧密关联的信息，把长内容截断并留下续读入口。调用数降到很低。<br>预算拉满时，整段 Thread 历史也塞了进来。调用数不再减少，<b>无关字数却猛增</b>。这就是“稀释注意力”。<br><span class="data-note">简化模型：按优先级贪心放入。排序是课程的选择：紧密关联对象的 ID 和摘要排在前，时空相邻的内容排在后。原文只规定“先关联 ID，再相邻内容”。可截断的长内容最多截到 50 字（Spill），其余放不下就只留引用。每缺一条 ★ 信息，或截断一条 ★ 信息，记 1 次额外工具调用。字数是示意值，不是原文数据。</span></div>
   </div>
 
   <div class="callout tip"><span class="ttl">看演示要点</span>三步法的顺序本身就是一种 Cache 替换策略：越可能用到的越先放；放不下的长内容不是丢掉，而是“截断 + 留续读入口”。信息 Spill 到窗口外，模型并没有失去它，只是要多读一次。</div>
@@ -204,10 +204,11 @@
     </div>
     <div class="demo" id="d3-lanes"></div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d3-out"></div></div>
-    <div class="chart-foot" id="d3-foot">关掉“投机执行”，对比同一件事的时间线。开启时，Agent 用后台算力去“赌”一次。赌中了，人等待的时间大幅缩短。赌不中，Agent 丢弃结果，群里一条消息都不多。<br><span class="data-note">简化模型：时间单位是分钟，数值是示意。关闭投机执行时，假设讨论结束后有人 @agent，Agent 再开始同样的工作。</span></div>
+    <div class="chart-foot" id="d3-foot">关掉“投机执行”，对比同一件事的时间线。开启时，Agent 用后台算力去“赌”一次。赌中了，人等待的时间大幅缩短，算力和不投机时一样多。赌不中，Agent 丢弃结果，群里一条消息都不多，但这次的算力白花了。这就是原文说的“消耗额外的后台算力”。<br><span class="data-note">简化模型：时间单位是分钟，数值是示意。关闭投机执行时，假设只有“能复现，有简单修复”这一种情形会有人在讨论后 @agent；另两种情形没人叫 Agent。</span></div>
   </div>
   <div class="callout note"><span class="ttl">补充：CPU 里的投机执行</span>CPU 遇到条件分支时，不等条件算出来，就先猜一个方向往下执行。猜对了，结果直接用，省下等待；猜错了，把算出来的结果全部丢弃，从正确的分支重来。代价是做了一些“白干”的计算。<br>Super-agent 的做法结构相同：用后台算力换人的等待，猜错就丢弃。关键是<b>不能让错误的结果“泄露”出去</b>。在这里，就是不发出无用的消息。</div>
-  <div class="callout warn"><span class="ttl">常见误解</span>投机执行不是“想到什么就往群里发什么”。“静默复现并修复”的精髓在于<b>交付门槛</b>：确认问题、修复简单，两条都满足才说话。它和 <a href="SA01-why-super-agent.html#s5">SA01</a> 讲的“主动 = 做值得做的事 + 没事保持安静”是一回事。这条策略本身是写在语义层里的（见 <a href="SA03-event-filter-route.html">SA03</a> 的两级过滤）。</div>
+  <div class="callout warn"><span class="ttl">常见误解</span>投机执行不是“想到什么就往群里发什么”。“静默复现并修复”的精髓在于<b>交付门槛</b>：确认问题、修复简单，两条都满足才说话。它和 <a href="SA01-why-super-agent.html#s5">SA01</a> 讲的“主动 = 做值得做的事 + 没事保持安静”是一回事。</div>
+  <div class="callout note"><span class="ttl">补充推断：这条策略写在哪</span>原文 §3.4 只说团队“配置了一条策略”，没说写在哪一层。课程推断它最可能写在语义层。依据是 §3.1：语义层可以用提示词随时开关或新增策略（见 <a href="SA03-event-filter-route.html">SA03</a> 的两级过滤）。</div>
 </section>
 
 <!-- ============ 6 ============ -->
@@ -215,23 +216,23 @@
   <h2><span class="num">06</span>自测与速记</h2>
   <div class="quiz" data-answer="1">
     <div class="q">原文对“Spill”的一种简单直接的做法是？</div>
-    <div class="opts"><button>把超出预算的内容直接删除</button><button>截断超出部分，并保留续读入口，模型需要完整内容时再调用工具读取</button><button>把超出部分交给另一个 Worker 处理</button><button>压缩成向量存入数据库</button></div>
+    <div class="opts"><button>把超出预算的部分直接删掉，模型以后不再需要它</button><button>截断超出部分，保留续读入口，需要时再读</button><button>把超出部分交给另一个 Worker 总结，再放回窗口</button><button>把完整内容压缩成摘要，原文不再保留</button></div>
     <div class="explain">原文 §3.3 第 3 步：对无法全部 Inline 的长内容设定较小的长度上限，截断超出部分并保留续读入口。</div>
   </div>
   <div class="quiz" data-answer="2">
     <div class="q">按原文的三步法，下面哪一项最适合在第 2 步“利用局部性逐步 Inline”时加入？</div>
-    <div class="opts"><button>整个代码仓库的目录树</button><button>团队过去一个月的全部群聊记录</button><button>这条 IM 消息所回复的消息，以及它的前后相邻消息</button><button>其他无关任务的执行日志</button></div>
+    <div class="opts"><button>整个代码仓库的目录树，方便模型定位文件</button><button>团队过去一个月的全部群聊记录，以免漏掉背景</button><button>这条消息所回复的消息和前后相邻消息</button><button>其他任务的执行日志，供模型参考做法</button></div>
     <div class="explain">原文举例：内容前 50 字、IM 消息的前后相邻消息与所回复的消息、代码评论所在评审讨论中的相邻评论。它们在时间或空间上相邻，最可能马上用到。</div>
   </div>
   <div class="quiz" data-answer="0">
     <div class="q">链式召回能够“一跳一跳”展开，关键原因是？</div>
-    <div class="opts"><button>每次召回返回的对象本身也遵循 Inline &amp; Spill，内联了下一跳对象的摘要与 ID</button><button>Router 把全部历史都放在自己的上下文里</button><button>系统维护了一个中心化的全文搜索索引</button><button>Worker 之间直接通信交换上下文</button></div>
+    <div class="opts"><button>每个召回结果都内联下一跳对象的 ID 和摘要</button><button>Router 把所有任务的全量历史常驻在上下文里</button><button>系统维护一个中心化的全文索引，按关键词查</button><button>Worker 之间点对点通信，互相交换上下文</button></div>
     <div class="explain">对象靠唯一 ID 构成引用图；每个召回结果都内联下一跳的 ID 与摘要，模型就能顺着引用关系按需展开。</div>
   </div>
   <div class="quiz" data-answer="3">
     <div class="q">在“静默复现并修复”策略下，Agent 后台复现了问题，但发现修复需要团队做设计取舍。按原文的描述，它应该？</div>
-    <div class="opts"><button>立即提交一个大改动的 PR</button><button>在群里发长文分析所有方案</button><button>每隔一段时间汇报进展</button><button>不满足“确认问题并找到简单修复”的交付条件，因此不主动交付这次投机的结果</button></div>
-    <div class="explain">原文：只有在确认问题并找到简单的修复方案后，才会把结果交付给用户，否则全程保持安静。投机执行的结果“没有价值就丢弃”。</div>
+    <div class="opts"><button>立即提交一个大改动的 PR，让团队在评审里讨论</button><button>在群里发长文分析各方案利弊，帮团队做决定</button><button>每隔一段时间在群里汇报一次后台进展</button><button>不交付这次投机的结果，保持安静</button></div>
+    <div class="explain">需要设计取舍，就不满足“确认问题并找到简单修复”的交付条件。原文：只有在确认问题并找到简单的修复方案后，才会把结果交付给用户，否则全程保持安静。投机执行的结果“没有价值就丢弃”。</div>
   </div>
 
   <h3>速记表</h3>
@@ -267,10 +268,10 @@ SA.onReady(function () {
   const ITEMS = [
     { step: 1, name: "当前消息 ID 与摘要", txt: "<code>trigger_id: #42</code> · “张三请求修改登录重试次数”", len: 20, need: true },
     { step: 2, name: "紧密关联对象的 ID", txt: "<code>thread_id: #08</code> <code>reply_to: #39</code> <code>worker_id: #03</code>", len: 18, need: true },
+    { step: 2, name: "Worker #03 状态摘要", txt: "“修复登录超时：PR #1876 已合入；订阅 Thread #08、#15”", len: 70, need: true },
     { step: 2, name: "当前消息全文", txt: "含 380 字报错日志", len: 430, cut: true, need: true },
     { step: 2, name: "所回复的消息 #39", txt: "“登录超时修复已合入，重试次数暂定 5 次……”", len: 120, cut: true, need: true },
     { step: 2, name: "前后相邻消息（各 1 条）", txt: "前：“今天发版吗？” 后：“+1 我也遇到过”", len: 60, need: false },
-    { step: 2, name: "Worker #03 状态摘要", txt: "“修复登录超时：PR #1876 已合入；订阅 Thread #08、#15”", len: 70, need: true },
     { step: 3, name: "Thread #08 完整历史", txt: "该话题过去两周的 86 条消息", len: 1600, cut: true, need: false },
   ];
   const CAP = 50;
@@ -289,7 +290,7 @@ SA.onReady(function () {
     const b = +SA.$("#d1-b").value; SA.$("#d1-bv").textContent = b;
     const p = plan(b);
     const LBL = { in: "Inline", cut: "Spill 截断", out: "只留引用" };
-    SA.$("#d1-list").innerHTML = p.map((x) => '<li class="' + x.st + '"><span class="st">' + LBL[x.st] + '</span><span class="body">' + (x.it.need ? '<span class="need">★ </span>' : "") + "<b>" + x.it.name + "</b>（第 " + x.it.step + " 步）<small>" + x.it.txt +
+    SA.$("#d1-list").innerHTML = p.map((x) => '<li class="' + x.st + '"><span class="st">' + LBL[x.st] + '</span><span class="body">' + (x.it.need ? '<span class="need">★ </span>' : "") + "<b>" + x.it.name + "</b>（" + (x.st === "cut" && x.it.step === 2 ? "第 2 步内联前 " + CAP + " 字，其余按第 3 步 Spill" : "第 " + x.it.step + " 步") + "）<small>" + x.it.txt +
       (x.st === "cut" ? " → 截到前 " + CAP + " 字 + <code>read(…)</code> 续读入口" : x.st === "out" ? (x.n ? " → 只保留 ID，需要时调用工具读取" : " → 预算用尽，未注入") : "") + '</small></span><span class="n">' + x.n + " / " + x.it.len + "</span></li>").join("");
     const used = p.reduce((s, x) => s + x.n, 0), waste = p.filter((x) => !x.it.need).reduce((s, x) => s + x.n, 0), c = calls(p);
     SA.$("#d1-bar").style.width = Math.min(100, (100 * used) / Math.max(b, 1)) + "%";
@@ -367,6 +368,10 @@ SA.onReady(function () {
       lanes.push({ name: "Agent（后台）", segs });
       compute = work; msgs = c.deliver ? 1 : 0;
       wait = c.deliver ? deliverAt : null;
+    } else if (!c.deliver) {
+      // 不投机时，没人确认问题，也就没人 @agent：Agent 不花算力，也没有结果
+      lanes.push({ name: "Agent（没人叫）", segs: [] });
+      compute = 0; msgs = 0; wait = null;
     } else {
       const start = c.discEnd + 2; // 讨论后才有人 @agent
       lanes[0].segs.push({ t0: c.discEnd, t1: start, cls: "c5", text: "@agent" });
@@ -377,13 +382,15 @@ SA.onReady(function () {
       compute = work; msgs = 2; wait = start + work;
     }
     SA.lanes("#d3-lanes", lanes, { t1: 50, unit: " 分" });
+    const extra = spec ? compute - (c.deliver ? work : 0) : 0;
     let note;
     if (spec && c.deliver) note = "讨论还没结束（第 " + c.discEnd + " 分钟），修复已在第 " + SA.fmt(deliverAt, 0) + " 分钟交付。人只需要审一个 PR。";
-    else if (spec) note = "后台花了 " + compute + " 分钟算力，没有达到交付条件，结果被丢弃。群里一条消息都没多，人没有被打扰。";
+    else if (spec) note = "后台花了 " + compute + " Agent·分钟，没有达到交付条件，结果被丢弃。这 " + compute + " 分钟是赌输白花的算力。群里一条消息都没多，人没有被打扰。";
+    else if (!c.deliver) note = "没人确认问题，也就没人 @agent。Agent 一分钟算力都不花，这件事也没有人得到结果。";
     else note = "人要先讨论、再 @agent、再等它干完：从报问题到拿到结果用了 " + SA.fmt(wait, 0) + " 分钟，并且至少要发出和读 " + msgs + " 条消息。";
     SA.$("#d3-out").textContent =
       "情形：" + c.name + " · 投机执行：" + (spec ? "开" : "关") + "\n" +
-      "后台算力消耗：" + compute + " Agent·分钟\n" +
+      "后台算力消耗：" + compute + " Agent·分钟" + (spec ? "（比不投机多花 " + extra + " Agent·分钟）" : "") + "\n" +
       "人等到结果：" + (wait == null ? "—（没有结果需要人看）" : SA.fmt(wait, 0) + " 分钟") + "；Agent 发出的消息：" + msgs + " 条\n" + note;
   }
   SA.$$("#d3-case .btn").forEach((b) => b.addEventListener("click", () => { cur = b.dataset.c; SA.$$("#d3-case .btn").forEach((x) => x.classList.toggle("on", x === b)); draw3(); }));

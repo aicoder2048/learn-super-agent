@@ -75,7 +75,7 @@
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
     <div class="chart-foot">事件顺序：A 新任务 → B 新任务 → <b>A 跟进：改用方案 B</b> → C 新任务 → <b>B 跟进：补一个测试</b> → D 新任务。<br>看三处：①最后一个任务何时完成；②有几个“声音”在回复用户；③“A 改用方案 B”这条跟进，有没有送到真正在做 A 的地方。<br><span class="data-note">简化模型：跟进事件需要额外 40% 的执行时间；Router 每次路由耗时 0.3 分钟。这里 Router 把跟进转给已有 Worker；SA03 会讲更快的“订阅与直通”。数字只用来说明机制，不是原文实验。</span></div>
   </div>
-  <div class="callout tip"><span class="ttl">看模拟要点</span>把“事件间隔”调小，让事件变密。单 Session 方案的完成时间会明显变长。原因是前面的长任务堵住了后面的事件，这叫<a class="term" href="glossary.html#head-of-line-blocking">队头阻塞</a>。“每事件一个 Session”最快。但 A 的跟进进了一个新 Session，它对 A 一无所知。原来那个 Session 还在按方案 A 干活。</div>
+  <div class="callout tip"><span class="ttl">看模拟要点</span>把“事件间隔”调小，让事件变密。单 Session 方案的“全部完成”时间停在 48 分不变。事件一直在排队，这个时间只由总工作量决定。变长的是它的“平均任务耗时”：后到的事件要等前面的长任务做完。这叫<a class="term" href="glossary.html#head-of-line-blocking">队头阻塞</a>。<br>另两种方案随事件变密越来越快，和单 Session 的差距拉大。“每事件一个 Session”最快。但 A 的跟进进了一个新 Session，它对 A 一无所知。原来那个 Session 还在按方案 A 干活。</div>
 </section>
 
 <!-- ============ 2 ============ -->
@@ -150,6 +150,7 @@
     <tr><td>单次请求耗时</td><td>2.5 秒</td><td>3.9 秒</td></tr>
     <tr><td>单个决定分摊的推理时间</td><td>6.4 秒</td><td>1.6 秒</td></tr>
   </table></div>
+  <div class="callout note"><span class="ttl">补充：6.4 秒为什么比 2.5 秒还长</span>在 1 条/分钟时，batch 是 1.0。按“单次耗时 ÷ batch”算，分摊应约等于 2.5 秒。原文给的却是 6.4 秒。原文没有说明分摊时间的统计口径。这个数大于单次请求耗时，说明它计入了单次请求以外的开销。所以上面演示里的“分摊”只看趋势，不和 6.4 秒直接对比。</div>
   <p>原文据此认为：单个常驻 Router Session 能保持上下文连续，而且<b>在他们目前的团队规模下已经够用</b>。前提是加上订阅与直通、链式召回（见 <a href="SA03-event-filter-route.html">SA03</a>、<a href="SA04-context-speculation.html">SA04</a>）。实验细节见 <a href="SA07-experiments.html">SA07</a>。</p>
 
   <h3>真的不够时：切分</h3>
@@ -186,7 +187,7 @@
   <h2><span class="num">06</span>自测与速记</h2>
   <div class="quiz" data-answer="1">
     <div class="q">“每个事件都新开一个独立 Session”的方案，主要问题是什么？</div>
-    <div class="opts"><button>吞吐量太低</button><button>缺少全局上下文，结果割裂；多个 Session 各自回复，交互混乱</button><button>上下文窗口会被撑满</button><button>无法使用工具</button></div>
+    <div class="opts"><button>并发吞吐太低，事件在队列里排长队</button><button>缺少全局上下文，结果割裂，各自回复显得混乱</button><button>所有任务挤在一个上下文里，窗口很快被撑满</button><button>新开的 Session 拿不到工具，只能空谈</button></div>
     <div class="explain">这个方案并发吞吐最高。但任务之间并不完全独立。缺少全局上下文，结果会彼此割裂。多个 Session 各自回复，交互会变乱。</div>
   </div>
   <div class="quiz" data-answer="2">
@@ -196,12 +197,12 @@
   </div>
   <div class="quiz" data-answer="0">
     <div class="q">事件密集涌入时，单个 Router Session 仍能撑住，主要靠什么？</div>
-    <div class="opts"><button>积压的 Trigger 合并进下一次 LLM 调用，在 Prefill 阶段并行计算</button><button>自动切换到更快的模型</button><button>丢弃一部分事件</button><button>让 Worker 直接回复用户</button></div>
-    <div class="explain">这就是批处理。Router 每步是长输入、短输出，多条输入合并后单次耗时增长远慢于批大小。原文实测：batch 从 1.0 升到 2.8，单次请求从 2.5 秒到 3.9 秒，单个决定分摊时间从 6.4 秒降到 1.6 秒。</div>
+    <div class="opts"><button>把积压的 Trigger 合并进下一次 LLM 调用</button><button>拥堵时自动切换到更快、更小的模型</button><button>按优先级丢弃一部分低价值事件</button><button>让 Worker 绕过 Router，直接把结果回复给用户</button></div>
+    <div class="explain">这就是批处理。合并后的输入在 Prefill 阶段并行计算。Router 每步是长输入、短输出，多条输入合并后单次耗时增长远慢于批大小。原文实测：batch 从 1.0 升到 2.8，单次请求从 2.5 秒到 3.9 秒，单个决定分摊时间从 6.4 秒降到 1.6 秒。</div>
   </div>
   <div class="quiz" data-answer="3">
     <div class="q">两个 Worker 在同一个 PR 里改到了同一处代码。按原文的设计，它们一般怎样发现冲突？</div>
-    <div class="opts"><button>Worker 之间建立点对点通信</button><button>由用户手动通知</button><button>由 Watchdog 合并代码</button><button>它们都订阅了这个 PR 的 Thread，收到相同的事件通知</button></div>
+    <div class="opts"><button>Worker 之间建立点对点通信，互相同步改动</button><button>由用户发现冲突后，手动通知两个 Worker</button><button>由 Watchdog 定期扫描 PR，合并冲突代码</button><button>两者都订阅了这个 PR 的 Thread</button></div>
     <div class="explain">同层 Worker 通常不直接通信。只要都订阅了对应的 Thread，就会收到相同的事件，有机会自行发现和解决冲突。少数跨任务协同由 Router 中转。</div>
   </div>
 
@@ -282,12 +283,14 @@ SA.onReady(function () {
     SA.lanes("#d1-a", r.one.lanes, { t1, unit: " 分" });
     SA.lanes("#d1-b", r.many.lanes, { t1, unit: " 分" });
     SA.lanes("#d1-c", r.two.lanes, { t1, unit: " 分" });
+    // 差值 d > 0 表示双层更快；|d| < 0.05 分钟算持平，避免出现“快 -0.3 分钟”
+    const vs = (name, d) => name + (Math.abs(d) < 0.05 ? "基本持平" : (d > 0 ? "快 " : "慢 ") + SA.fmt(Math.abs(d), 1) + " 分钟");
     const row = (n, s, a, b, c) => n + "：全部完成 " + SA.fmt(s.make, 1) + " 分，平均任务耗时 " + SA.fmt(s.avg, 1) + " 分\n    统一回复 " + a + "  上下文连续 " + b + "  跟进生效 " + c;
     SA.$("#d1-out").textContent =
       row("① 单 Session", r.one.st, "✓", "✓", "✓") + "\n" +
       row("② 每事件一个", r.many.st, "✗", "✗", "✗（原 Session 仍按旧方案）") + "\n" +
       row("③ 双层架构", r.two.st, "✓", "✓", "✓") + "\n" +
-      "双层比单 Session 快 " + SA.fmt(r.one.st.make - r.two.st.make, 1) + " 分钟；比“每事件一个”慢 " + SA.fmt(r.two.st.make - r.many.st.make, 1) + " 分钟，但没有割裂和混乱。";
+      vs("双层比单 Session ", r.one.st.make - r.two.st.make) + "；" + vs("比“每事件一个”", r.many.st.make - r.two.st.make) + "，但没有割裂和混乱。";
   }
   ["#d1-w", "#d1-g"].forEach((id) => SA.$(id).addEventListener("input", draw1));
   draw1();

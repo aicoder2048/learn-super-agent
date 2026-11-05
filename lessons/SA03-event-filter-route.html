@@ -113,7 +113,7 @@
       <ul class="msgs" id="d1-msgs"></ul>
     </div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
-    <div class="chart-foot">先看默认配置：闲聊群只认明确请求，机器人消息直接忽略。程序层就滤掉了大部分噪音，不花一次模型调用。<br>试着把“闲聊群”改成“作为候选事件”，看进入大模型的条数怎么涨。再关掉“静默复现并修复”，看同样的候选事件怎样变成“不行动”。<br><span class="data-note">消息是虚构的示例。来源、策略选项和“静默复现并修复”策略名取自原文；具体的判断由本页按简单规则模拟，真实系统里由 LLM 根据提示词判断。</span></div>
+    <div class="chart-foot">先看默认配置：闲聊群只认明确请求，机器人消息直接忽略。程序层先滤掉一部分噪音，不花一次模型调用。<br>试着把“闲聊群”改成“作为候选事件”，看进入大模型的条数怎么涨。再关掉“静默复现并修复”，看同样的候选事件怎样变成“不行动”。<br>“代码评审意见自动跟进”只作用于 GitHub 评论。先把“GitHub 评论”改成“作为候选事件”，再勾选它，才能看到变化。<br><span class="data-note">消息是虚构的示例。来源、策略选项和“静默复现并修复”策略名取自原文；具体的判断由本页按简单规则模拟，真实系统里由 LLM 根据提示词判断。</span></div>
   </div>
   <div class="callout tip"><span class="ttl">两层的分工</span>程序层回答“这条消息有没有资格让模型看一眼”。语义层回答“看了之后，值不值得做”。前者便宜、死板、可审计；后者灵活、贵、可以用自然语言随时改。</div>
   <div class="callout warn"><span class="ttl">注意明确请求</span>“仅响应明确请求”不等于“全部忽略”。设成这一档的来源，<a class="term" href="glossary.html#explicit-request">明确请求</a>（例如 @agent 帮我…）仍然能通过。</div>
@@ -181,23 +181,23 @@
   <h2><span class="num">06</span>自测与速记</h2>
   <div class="quiz" data-answer="2">
     <div class="q">两级过滤里，“对不同来源分别设置仅响应明确请求、作为候选事件或直接忽略”属于哪一层？</div>
-    <div class="opts"><button>语义层策略（Slow Path）</button><button>Router 层</button><button>程序层策略（Fast Path）</button><button>Watchdog</button></div>
+    <div class="opts"><button>语义层策略（Slow Path）</button><button>Router 层的路由决定</button><button>程序层策略（Fast Path）</button><button>Watchdog 的外部检查</button></div>
     <div class="explain">这是按来源做的确定性准入检查，用代码完成，属于程序层（Fast Path）。语义层由 LLM 按提示词写的策略做判断。</div>
   </div>
   <div class="quiz" data-answer="0">
     <div class="q">原文为什么说语义层是“面向人类的自然语言扩展点”？</div>
-    <div class="opts"><button>因为它的策略用提示词编写，可以随时用自然语言开关或新增策略</button><button>因为它直接回复用户</button><button>因为它负责翻译多语言消息</button><button>因为它运行在用户本地</button></div>
+    <div class="opts"><button>策略写在提示词里，用自然语言就能增删</button><button>它负责用自然语言直接回复群里的每位用户</button><button>它会把各语言的消息翻译成统一的自然语言</button><button>它运行在用户本地，由用户自己配置和启动</button></div>
     <div class="explain">语义层策略是写在提示词里的。改行为不用改代码，用自然语言加一条、关一条就行，例如“静默复现并修复”。</div>
   </div>
   <div class="quiz" data-answer="3">
     <div class="q">一个 Worker 正在处理某 PR，PR 下来了一条新评论，内容超出了它的任务范围。按原文，它可以怎么做？</div>
-    <div class="opts"><button>忽略这条评论</button><button>直接回复评论者</button><button>另开一个新的 Worker</button><button>取消订阅，或把事件交回 Router 重新分派</button></div>
+    <div class="opts"><button>继续处理，把这条评论一并纳入当前任务</button><button>直接在 PR 下回复评论者，说明不归它管</button><button>自己另开一个新的 Worker 来处理</button><button>取消订阅，或交回 Router 重新分派</button></div>
     <div class="explain">原文：若新事件超出了当前任务的范围，Worker 也可取消订阅或交回 Router 层重新分派。Worker 不直接对人说话，也不负责分派新任务。</div>
   </div>
   <div class="quiz" data-answer="1">
     <div class="q">原文消融实验中，去掉直通机制带来的主要变化是？</div>
-    <div class="opts"><button>任务完成时间明显变长</button><button>完成时间基本不变，但 Router 决定增加约 30%，读缓存 token 增加约 37%</button><button>任务质量下降</button><button>Worker 之间开始互相通信</button></div>
-    <div class="explain">直通不提高完成质量与速度。但它为 Router 节省了可观的 token 与推理开销：去掉直通后，读缓存 token 从 2323 万增加到 3177 万。</div>
+    <div class="opts"><button>完成时间明显变长，因为 Router 被事件堵住</button><button>完成时间基本不变，Router 的决定和 token 增加</button><button>完成时间不变，但任务质量明显下降</button><button>Router 的决定和 token 都减少，Worker 更忙</button></div>
+    <div class="explain">直通不提高完成质量与速度。但它为 Router 节省了可观的 token 与推理开销。去掉直通后，Router 的决定增加约 30%。读缓存 token 从 2323 万增加到 3177 万，约 +37%。</div>
   </div>
 
   <h3>速记表</h3>
@@ -210,7 +210,7 @@
     <tr><td>Thread</td><td>同一 PR、同一 IM 话题、同一邮件串下的连续事件</td></tr>
     <tr><td>订阅与直通</td><td>Worker 订阅 Thread；后续事件程序直通（Fast），未订阅的新事件归 Router（Slow）</td></tr>
     <tr><td>多对多</td><td>多个 Worker 订阅同一 Thread，无需点对点通信就能看到彼此操作</td></tr>
-    <tr><td>直通的价值</td><td>完成时间基本不变；Router 决定 −约 30%，读缓存 token 3177 万 → 2323 万</td></tr>
+    <tr><td>直通的价值</td><td>去掉直通：完成时间基本不变；Router 决定 +约 30%，读缓存 token 2323 万 → 3177 万（+约 37%）</td></tr>
   </table></div>
 
   <h3>相关课程</h3>

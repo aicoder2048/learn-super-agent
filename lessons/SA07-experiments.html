@@ -100,7 +100,7 @@
 <section class="lesson-sec" id="s3">
   <h2><span class="num">03</span>结果一：完成时间</h2>
   <figure class="fig"><img src="img/fig12.png" alt="工作请求的累计到达曲线与四种方案的累计完成曲线"><figcaption><b>原文图 12</b>工作请求的累计到达曲线（黑）与四种方案的累计完成曲线。5 次运行均值；消息间隔与工作时长按 1/4 缩放，模型调用耗时为真实值。</figcaption></figure>
-  <p>读图方法：黑线是工作请求到达的累计数。彩色线是完成的累计数。<b>彩色线离黑线越近，系统越快跟上需求。</b>蓝线（Super-agent）和绿色虚线（去掉直通）几乎重合，紧跟在黑线后面。红线（中性提示）明显落后。紫线（优先委派）前半段接近蓝线，最后一段拖出很长的尾巴，到约 50 分钟才完成。</p>
+  <p>读图方法：黑线是工作请求到达的累计数。彩色线是完成的累计数。<b>彩色线离黑线越近，系统越快跟上需求。</b>蓝线（Super-agent）和绿色虚线（去掉直通）几乎重合。它们离黑线最近，但仍落后约 10 分钟（目测近似值）。红线（中性提示）明显落后。紫线（优先委派）前半段接近蓝线，最后一段拖出很长的尾巴，到约 50 分钟才完成。</p>
   <figure class="fig"><img src="img/fig13.png" alt="四种方案的任务完成时间与读缓存 Token"><figcaption><b>原文图 13</b>每种方案重复运行 5 次；任务完成时间指从工作请求到结果消息的耗时。</figcaption></figure>
 
   <div class="chart-card" id="demo1">
@@ -126,7 +126,7 @@
     <li><b>提示优先委派</b>：5 次运行中有 4 次做了委派。完成时间缩短了，但整体仍慢于 Super-agent。剩下 1 次，模型判断工作“很小”而选择自己执行，形成图 12 中的紫色<a class="term" href="glossary.html#long-tail">长尾</a>。</li>
   </ul>
   <blockquote class="src">相比于在单 Session 中依赖提示词工程和模型临场判断分不分工，双层架构通过让 Router 不直接执行具体工作、Worker 仅接收所订阅 Thread 的消息，在系统层面上缓解了这一问题。<cite>§7.1</cite></blockquote>
-  <div class="callout tip"><span class="ttl">要点</span>“优先委派”的 p50 是 13.8 分钟，已经接近 Super-agent 的 12.4。差距主要在 p95（29.0 vs 15.7）。也就是说，提示词能把<b>多数情况</b>教对，但保证不了<b>每一次</b>。结构上的约束（Router 不配执行工具）才能消掉这条长尾。</div>
+  <div class="callout tip"><span class="ttl">要点</span>“优先委派”的 p50 是 13.8 分钟，已经接近 Super-agent 的 12.4。差距主要在 p95（29.0 vs 15.7）。也就是说，提示词能把<b>多数情况</b>教对，但保证不了<b>每一次</b>。结构上的约束在系统层面缓解了这条长尾：Router 不直接执行具体工作，甚至可以不配 Bash 工具。</div>
 </section>
 
 <!-- ============ 4 ============ -->
@@ -205,22 +205,22 @@
   <h2><span class="num">07</span>自测与速记</h2>
   <div class="quiz" data-answer="2">
     <div class="q">原文消融实验里，编码工作用一个只消耗时间的工具代替。这意味着实验衡量的是？</div>
-    <div class="opts"><button>模型写代码的质量</button><button>单个任务的执行能力</button><button>系统的调度与协作能力</button><button>工具调用的准确率</button></div>
+    <div class="opts"><button>模型实际写出的代码质量</button><button>单个任务的执行能力</button><button>系统的调度与协作能力</button><button>工具调用是否准确</button></div>
     <div class="explain">原文：实验衡量的是系统的调度与协作能力，而非对单个任务的执行能力。</div>
   </div>
   <div class="quiz" data-answer="0">
     <div class="q">在“中性提示”下，单 Session 方案为什么最慢？</div>
-    <div class="opts"><button>模型 5 次运行中一次都没调用 Subagent，所有工作都在主 Session 里做，并不断被新消息打断</button><button>Subagent 太多，互相冲突</button><button>Router 成了瓶颈</button><button>token 用完了</button></div>
+    <div class="opts"><button>从不调用 Subagent，主 Session 自己干活，常被新消息打断</button><button>每条请求都开了 Subagent，Subagent 太多，彼此争抢同一份上下文</button><button>Router 收到的 Trigger 太多，批处理跟不上，成了全局瓶颈</button><button>主 Session 上下文太长，读缓存 token 超限后反复压缩</button></div>
     <div class="explain">中性提示下，5 次运行中模型一次都没有调用 Subagent，p95 达到 29.5 分钟。</div>
   </div>
   <div class="quiz" data-answer="3">
     <div class="q">去掉直通之后，下面哪个说法符合原文实验结果？</div>
-    <div class="opts"><button>任务完成时间明显变长</button><button>任务完成质量下降</button><button>读缓存 token 减少</button><button>完成时间基本一致，但 Router 决定增加约 30%，读缓存 token 增加约 37%</button></div>
+    <div class="opts"><button>完成时间明显变长，Router 决定增加约 30%，读缓存 token 增加约 37%</button><button>完成时间基本一致，Router 决定减少约 30%，读缓存 token 减少约 27%</button><button>完成时间基本一致，但任务完成质量下降，部分跟进被丢弃</button><button>完成时间基本一致，Router 决定约 +30%，token 约 +37%</button></div>
     <div class="explain">原文：直通机制不提高任务完成质量与速度，但为 Router Session 节省了可观的 token 与推理开销。</div>
   </div>
   <div class="quiz" data-answer="1">
     <div class="q">Router 批处理“越忙越划算”的主要原因是？</div>
-    <div class="opts"><button>忙的时候模型会换成更快的版本</button><button>Router 每步是长输入、短输出，多条 Trigger 在 Prefill 阶段并行计算，单次请求耗时增长远慢于 batch 大小</button><button>忙的时候 Router 会跳过一部分 Trigger</button><button>Worker 帮 Router 分担了决定</button></div>
+    <div class="opts"><button>负载高时系统换用更快的模型版本，单次请求耗时下降</button><button>多条 Trigger 在 Prefill 阶段并行算，单次耗时涨得比 batch 慢</button><button>负载高时 Router 跳过低优先级 Trigger，需要做的决定变少</button><button>负载高时更多事件直通 Worker，由各个 Worker 替 Router 做掉大部分决定</button></div>
     <div class="explain">batch 从 1.0 升到 2.8，单次请求只从 2.5 秒升到 3.9 秒，每个决定的分摊时间从 6.4 秒降到 1.6 秒。</div>
   </div>
 
@@ -330,7 +330,9 @@ SA.onReady(function () {
       "到达速率 " + r + " 条/分（插值，近似值）：batch " + SA.fmt(b, 2) + "，单次请求 " + SA.fmt(t, 1) + " 秒，每个决定分摊 " + SA.fmt(a, 2) + " 秒\n" +
       "相对最低负载：batch ×" + SA.fmt(b / P[0][1], 2) + "，单次请求 ×" + SA.fmt(t / P[0][2], 2) + "，分摊时间 ×" + SA.fmt(a / P[0][3], 2) + "\n" +
       "补充推算（原文没有给出）：按分摊时间折算，Router 每分钟约能做 " + SA.fmt(cap, 1) + " 个决定；若不批处理（一直按最低负载的 " + SA.fmt(P[0][3], 2) + " 秒/个），每分钟只能做约 " + SA.fmt(60 / P[0][3], 1) + " 个。" +
-      (r > 60 / P[0][3] ? "\n→ 当前到达速率已超过“不批处理”的处理能力；正是批处理让 Router 跟上了。" : "");
+      (r <= 60 / P[0][3] ? "\n→ 当前到达速率低于“不批处理”的处理能力：不批处理也跟得上。"
+        : cap >= r ? "\n→ 到达速率超过了“不批处理”的处理能力。批处理把容量提到约 " + SA.fmt(cap, 1) + " 个/分，高于到达速率，Router 跟得上。"
+        : "\n→ 批处理把容量提到约 " + SA.fmt(cap, 1) + " 个/分，接近到达速率 " + r + " 条/分，已到测量范围的边缘。补充推测：积压变多时 batch 会继续变大，容量可能再升；但原文没有测更高的速率。原文只说实验中“仍未触及单 Router 的吞吐瓶颈”。");
   }
   SA.$("#d2-r").addEventListener("input", draw2);
   draw2();

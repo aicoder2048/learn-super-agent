@@ -88,7 +88,6 @@
   <ol class="steps">
     <li><b>计算上云</b>：把 Agent Loop 放进云端<a class="term" href="glossary.html#stateless-compute">无状态</a>的弹性计算容器。</li>
     <li><b>状态入库</b>：把 Session 等持久化状态存进数据库。</li>
-    <li><b>容器可替换</b>：无状态容器可以水平扩展、重启或替换。会话和任务的连续性由持久化存储保障。</li>
   </ol>
   <blockquote class="src">无状态计算容器可以水平扩展、重启或替换，会话与任务的连续性则由持久化存储保障，从而使 Agent 摆脱单台本地设备的生命周期限制，实现云端持久在线。<cite>§5.1</cite></blockquote>
   <div class="callout note"><span class="ttl">补充：存算分离的“前辈”</span>云数据库（例如 Snowflake、Aurora）把查询计算节点和存储层分开。计算节点随用随开，数据始终在共享存储里。<br>Web 后端也常这样做。应用服务器不保存状态，会话放进 Redis 或数据库。这样任何一台服务器都能接着处理同一个用户。<br>原文把同样的思路用到 Agent Loop 上。</div>
@@ -137,14 +136,14 @@
     <div class="demo">
       <div class="btn-row" style="margin-bottom:8px"><span class="data-note">部署方式：</span>
         <button class="btn on" data-mode="A">① 本地单机</button>
-        <button class="btn" data-mode="B">② 只做第一步 + 沙箱重建（原文否定的思路 A）</button>
+        <button class="btn" data-mode="B">② 只做第一步 + 沙箱重建（原文认为不理想的思路 A）</button>
         <button class="btn" data-mode="C">③ 两步都做（端侧 daemon）</button>
       </div>
       <div class="btn-row"><span class="data-note">事件：</span>
-        <button class="btn" data-ev="laptop">笔记本合盖 / 离线</button>
+        <button class="btn" data-ev="laptop" id="d1-laptop">笔记本合盖 / 离线</button>
         <button class="btn" data-ev="restart">重启 Agent 计算进程</button>
-        <button class="btn" data-ev="device">个人设备上线 / 下线</button>
-        <button class="btn" data-ev="reset">复位</button>
+        <button class="btn" data-ev="device" id="d1-device">个人设备上线</button>
+        <button class="btn" data-ev="reset">重来</button>
       </div>
       <div class="places" id="d1-places"></div>
       <div class="tbl-wrap"><table class="tbl task-tbl" id="d1-tasks"></table></div>
@@ -186,11 +185,11 @@
       <div id="d2-lanes"></div>
     </div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d2-out"></div></div>
-    <div class="chart-foot">切换两种监控方式对比。<br>出现“无效循环”和“偏离目标”时，进程活着，也不报错。存活探测发现不了，任务一直空转到结束。Watchdog 由模型比较前后两次检查的进展，所以能发现。<br>外部偶发故障修不了。Watchdog 就在每次定时检查时复查，外部恢复后马上让任务继续。<br><span class="data-note">简化模型：模拟 70 分钟。Watchdog 发现基础设施故障后 2 分钟修好；发现“无效循环”需要连续两次检查都没有进展；发现“偏离目标”需要故障出现至少 5 分钟、产出足够判断。外部故障在第 50 分钟自行恢复。数字只用来说明机制，不是原文实验。</span></div>
+    <div class="chart-foot">切换两种监控方式对比。<br>出现“无效循环”和“偏离目标”时，进程活着，也不报错。存活探测发现不了，任务一直空转到结束。Watchdog 让模型判断任务有没有实质进展，所以能发现。演示用“比较前后两次检查的进展”来简化这个判断；原文没有规定判断方法。<br>外部偶发故障修不了。Watchdog 就在每次定时检查时复查，外部恢复后马上让任务继续。<br><span class="data-note">简化模型：模拟 70 分钟。Watchdog 发现基础设施故障后 2 分钟修好；发现“无效循环”需要连续两次检查都没有进展；发现“偏离目标”需要故障出现至少 5 分钟、产出足够判断。外部故障在第 50 分钟自行恢复。数字只用来说明机制，不是原文实验。</span></div>
   </div>
 
   <div class="callout note"><span class="ttl">补充：看门狗与控制器</span>“Watchdog”一词来自硬件看门狗定时器。程序要定时“喂狗”。超时没喂，定时器就判定系统卡死，并强制复位。Kubernetes 的控制器是另一个熟悉的 Control Loop：不断比较“期望状态”和“实际状态”，有差距就纠正。原文的 Watchdog 更进一步：它让模型来判断“实际状态”里任务有没有真正进展。</div>
-  <div class="callout tip"><span class="ttl">实战提示</span>为什么 Watchdog 要放在主系统<b>之外</b>？如果它跑在 Router 或某个 Worker 里，主系统卡死时它也一起卡死。独立的会话 + 独立的定时触发，才能在主系统失灵时仍然工作。</div>
+  <div class="callout note"><span class="ttl">补充：为什么放在主系统之外</span>原文只说需要主系统外部的独立 Control Loop，没有展开理由。课程作者的理解是：如果 Watchdog 跑在 Router 或某个 Worker 里，主系统卡死时它也一起卡死。独立的会话加独立的定时触发，才能在主系统失灵时仍然工作。</div>
 </section>
 
 <!-- ============ 6 ============ -->
@@ -198,27 +197,27 @@
   <h2><span class="num">06</span>自测与速记</h2>
   <div class="quiz" data-answer="1">
     <div class="q">原文第一步解耦后，什么东西放进了数据库？</div>
-    <div class="opts"><button>推进 Agent Loop 的计算</button><button>Session 等需要持久保存的会话状态</button><button>代码仓库与本地工具链</button><button>端侧 daemon</button></div>
+    <div class="opts"><button>推进 Agent Loop 的计算和它的中间结果</button><button>Session 等会话状态</button><button>代码仓库、本地文件和工具链的副本</button><button>端侧 daemon 的配置和执行日志</button></div>
     <div class="explain">计算可以无状态，放进云端弹性容器；需要持久保存的是会话状态，存进数据库。</div>
   </div>
   <div class="quiz" data-answer="2">
     <div class="q">为什么原文不把执行环境同步到云端沙箱？</div>
-    <div class="opts"><button>云端沙箱不支持运行代码</button><button>沙箱太贵，原文只考虑成本</button><button>真实环境含未提交修改、私有凭据、内网依赖、特定工具链，同步成本高且容易遗漏</button><button>原文认为用户应当迁移到云端</button></div>
+    <div class="opts"><button>云端沙箱不能运行代码，也不能调用任何外部工具</button><button>沙箱的算力太贵，原文只从成本考虑</button><button>真实环境有本地修改、凭据和内网依赖，难同步</button><button>原文认为用户应当放弃本地环境，迁到云端</button></div>
     <div class="explain">难复制、难同步的是环境本身。所以让环境留在原地，用一个不保存会话状态的轻量 daemon 接入。</div>
   </div>
   <div class="quiz" data-answer="3">
     <div class="q">端侧 daemon 负责什么？</div>
-    <div class="opts"><button>保存会话状态，防止云端丢数据</button><button>运行一个本地的 Router</button><button>判断 Worker 是否偏离目标</button><button>只负责执行命令和返回结果</button></div>
+    <div class="opts"><button>保存会话状态，防止云端数据丢失</button><button>在本地运行一个 Router，处理离线时的消息</button><button>判断 Worker 是否偏离目标，必要时介入</button><button>只负责执行命令和返回结果</button></div>
     <div class="explain">原文：仅在端侧部署一个不保存会话状态的轻量 daemon，它只负责执行命令与返回结果。</div>
   </div>
   <div class="quiz" data-answer="0">
     <div class="q">Watchdog 能发现、而传统存活探测发现不了的异常是？</div>
-    <div class="opts"><button>模型陷入无效循环或偏离目标</button><button>进程崩溃</button><button>接口返回 500 错误</button><button>容器内存耗尽</button></div>
+    <div class="opts"><button>模型陷入无效循环或偏离目标</button><button>Worker 进程崩溃后没有自动重启</button><button>接口连续返回 500 错误，任务卡住</button><button>容器内存耗尽，被系统强制终止</button></div>
     <div class="explain">这类异常里，进程活着、也不报错。只有让模型判断 Worker 是否有实质进展、方向是否偏离整体目标，才能发现。</div>
   </div>
   <div class="quiz" data-answer="2">
     <div class="q">遇到外部偶发故障（例如外部服务暂时不可用），Watchdog 怎么做？</div>
-    <div class="opts"><button>立即终止相关任务</button><button>修改提示词绕开它</button><button>持续复查，直至恢复正常</button><button>通知所有用户</button></div>
+    <div class="opts"><button>立即终止相关任务，避免浪费算力</button><button>修改提示词，让任务绕开这个服务</button><button>持续复查，直至恢复正常</button><button>通知所有用户，等人工处理</button></div>
     <div class="explain">原文：发现异常时及时介入修复，遇到外部偶发故障则持续复查直至恢复正常。</div>
   </div>
 
@@ -296,12 +295,14 @@ SA.onReady(function () {
       P += place("个人设备", device, [it("env", "环境：特定硬件"), it("", "端侧 daemon")]);
     }
     SA.$("#d1-places").innerHTML = P;
+    SA.$("#d1-laptop").textContent = laptop ? "笔记本合盖 / 离线" : "笔记本开盖 / 上线";
+    SA.$("#d1-device").textContent = device ? "个人设备下线" : "个人设备上线";
     let T = "<tr><th>任务</th><th>需要的环境</th><th>状态</th></tr>";
     for (const t of TASKS) { const [c, s] = taskState(t); T += "<tr><td>" + t.id + " " + t.name + "</td><td>" + ENVNAME[t.env] + "（" + t.need + "）</td><td class=\"" + c + "\">" + s + "</td></tr>"; }
     SA.$("#d1-tasks").innerHTML = T;
     const ok = TASKS.filter((t) => taskState(t)[0] === "ok").length;
     SA.$("#d1-out").textContent =
-      "部署方式：" + { A: "① 本地单机", B: "② 只做第一步 + 沙箱重建（原文否定的思路 A）", C: "③ 两步都做（端侧 daemon）" }[mode] +
+      "部署方式：" + { A: "① 本地单机", B: "② 只做第一步 + 沙箱重建（原文认为不理想的思路 A）", C: "③ 两步都做（端侧 daemon）" }[mode] +
       "\nAgent 能响应新消息：" + (agentOnline() ? "是" : "否（设备离线即停止运行）") +
       "\n能正常推进的任务：" + ok + " / " + TASKS.length +
       "\n事件记录：" + (log.length ? log.slice(-4).join(" → ") : "（无）");

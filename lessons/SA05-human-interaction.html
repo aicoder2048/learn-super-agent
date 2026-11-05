@@ -98,7 +98,7 @@
     <div class="legend"><span><i style="background:#3d7be8"></i>LLM 推理步</span><span><i style="background:#16a085"></i>工具在跑</span><span><i style="background:#8a94a3"></i>前台阻塞</span><span><i style="background:#d64541"></i>stop() 终止的工具</span><span><i style="background:#c9a227"></i>竖线：消息 2 到达</span></div>
     <div class="demo" id="d1-lanes"></div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
-    <div class="chart-foot" id="d1-foot">拖动“消息 2 到达”。经典版里，不管消息何时到，都要等工具跑完。异步版里，等待只取决于“当前推理步还剩多久”。<br>把消息 2 拖到刚收到 Started 的那几秒里。你会看到异步版也要稍等。原因是模型正在处理 Started 通知，新输入要等这一步结束。<br>勾选“停下”，看 <code>stop()</code> 能省掉多少白跑的工具时间。<br><span class="data-note">简化模型：每个 LLM 推理步固定 4 秒；经典版在工具返回后，下一步同时看到结果和消息 2。数字只用来说明机制，不是原文实验。</span></div>
+    <div class="chart-foot" id="d1-foot">拖动“消息 2 到达”。经典版里，不管消息何时到，都要等工具跑完。异步版里，等待 = 当前推理步还剩的时间 + 回复的那一步，和工具耗时无关。<br>把消息 2 拖到刚收到 Started 的那几秒里。你会看到异步版也要稍等。原因是模型正在处理 Started 通知，新输入要等这一步结束。<br>勾选“停下”，看 <code>stop()</code> 能省掉多少白跑的工具时间。<br><span class="data-note">简化模型：时间轴从模型发起工具调用算起，工具在第 4 秒开始；每个 LLM 推理步固定 4 秒；经典版在工具返回后，下一步同时看到结果和消息 2。数字只用来说明机制，不是原文实验。</span></div>
   </div>
   <div class="callout note"><span class="ttl">补充：熟悉的影子</span>这是操作系统和网络编程里“阻塞 I/O → 异步 I/O”的老路。程序发起读请求后不干等，先去处理别的事。数据到了，系统再用事件通知它。<code>start()</code> 像提交一个异步请求，“结果作为新事件投递”像完成回调，<code>stop()</code> 像取消请求。这个类比是课程作者的解释。</div>
 </section>
@@ -146,17 +146,17 @@
   <h2><span class="num">06</span>自测与速记</h2>
   <div class="quiz" data-answer="2">
     <div class="q">在异步 ReAct Loop 中，模型调用 <code>start()</code> 后会发生什么？</div>
-    <div class="opts"><button>循环阻塞，直到工具返回最终结果</button><button>系统自动创建一个新的 Worker Session</button><button>立即收到“已启动（Started）”的返回，循环不再等待该工具；完成后结果作为新事件消息投递进会话</button><button>工具在前台运行，用户输入被缓存到工具结束</button></div>
+    <div class="opts"><button>循环阻塞，直到工具返回最终结果再进入下一步</button><button>系统为这个工具自动创建一个新的 Worker Session</button><button>立即收到 Started，结果完成后作为新事件投递</button><button>工具在前台运行，用户输入先缓存，等工具结束再处理</button></div>
     <div class="explain">原文 §4.1：调用 start() 后立即收到 Started；后台工具完成后，系统再把最终结果作为一条新的事件消息投递进会话。</div>
   </div>
   <div class="quiz" data-answer="1">
     <div class="q">异步 ReAct Loop 下，Agent 什么时候处理用户的新输入？</div>
-    <div class="opts"><button>立刻打断正在进行的 LLM 推理</button><button>在当前推理步结束后即被处理，不必等待后台工具完成</button><button>等后台工具全部完成后</button><button>由 Watchdog 定时转交</button></div>
+    <div class="opts"><button>立刻打断正在进行的 LLM 推理，优先处理新输入</button><button>当前推理步结束后就处理，不等后台工具</button><button>等后台工具全部完成后，和工具结果一起处理</button><button>由 Watchdog 定时检查，再转交给会话处理</button></div>
     <div class="explain">原文原话：“新输入在当前推理步结束后即被处理，不必等待后台工具完成。”它不打断当前的推理步。</div>
   </div>
   <div class="quiz" data-answer="3">
     <div class="q">关于异步任务机制在 DeepSeek Harness 中的状态，原文怎么说？</div>
-    <div class="opts"><button>尚在设计中，未实现</button><button>已实现并默认开启</button><button>只在开源原型中实现</button><button>已经实现，但尚未默认开启</button></div>
+    <div class="opts"><button>尚在设计阶段，还没有实现</button><button>已经实现，并且默认开启</button><button>只在开源原型里实现，内部版本没有</button><button>已经实现，但尚未默认开启</button></div>
     <div class="explain">原文 §4.1 末句：“这一异步任务机制已经在 DeepSeek Harness 中实现，但尚未默认开启。”</div>
   </div>
   <div class="quiz" data-answer="0">
@@ -236,9 +236,9 @@ SA.onReady(function () {
     ], { t1, unit: " 秒" });
     const sWasted = stopIt ? D : 0;
     SA.$("#d1-out").textContent =
-      "消息 2 在第 " + tm + " 秒到达\n" +
+      "时间从模型发起工具调用算起。消息 2 在第 " + tm + " 秒到达（工具开始后 " + m + " 秒）\n" +
       "经典 ReAct Loop：第 " + sReply + " 秒才回应，用户等了 " + sWait + " 秒\n" +
-      "异步 ReAct Loop：第 " + r1 + " 秒回应，用户等了 " + aWait + " 秒" + (r0 > tm ? "（其中 " + (r0 - tm) + " 秒在等当前推理步结束）" : "") + "\n" +
+      "异步 ReAct Loop：第 " + r1 + " 秒回应，用户等了 " + aWait + " 秒（等当前推理步结束 " + (r0 - tm) + " 秒 + 回复这一步 " + L + " 秒）\n" +
       (stopIt ? "“停下”：经典版的工具白跑了 " + sWasted + " 秒才得知要停；异步版在第 " + toolEnd + " 秒调用 stop()，工具只跑了 " + wasted + " 秒。"
               : "工具结果：经典版在回复里一起交付；异步版在工具完成后作为新事件投递，再用一步交付。");
   }

@@ -58,7 +58,7 @@
     <div class="kp"><div class="k">变化二 · 多任务</div><div class="v">多 Agent 协同变得可行</div><p>模型的多 Agent 协同能力也在提升。跨会话的组织与调度因此变得可行。</p></div>
   </div>
   <p>能力的提升催生了新的应用形态。近期，<a class="term" href="glossary.html#personal-agent">个人助手</a>（Personal Agent）集中涌现。它们直接接入消息、日程、邮件和工作平台，持续观察信息流，协助处理事务。</p>
-  <p>原文强调：这种<b>持续在线、事件驱动</b>的工作模式不只属于个人场景。在软件开发等团队场景里，它同样有价值。</p>
+  <p>原文强调：这种<b>持续在线、事件驱动</b>的工作模式不只属于个人场景。在软件开发等商业场景里，它同样很有价值。</p>
   <blockquote class="src">随着人类在底层执行中的参与减少，人的角色正逐步上移到更高层的决策与验收。<cite>§1</cite></blockquote>
 </section>
 
@@ -83,7 +83,7 @@
     <div class="chart-foot" id="d1-foot">把 Session 数从 1 往上拖。前几档，总产出几乎按比例增长。到了某个点，<b>你</b>的时间全部占满（利用率接近 100%）。这时再加 Session，只会让更多 Agent 停着等你。<br>再把“Agent 每次独立工作”调长（模型更强）。你会发现这个上限跟着变大。<br><span class="data-note">简化模型：模拟 2 小时；每次处理 1.5 分钟；Agent 工作时长在设定值的 50%–150% 之间随机；你按先来先服务处理。图中只画前 60 分钟。数字只用来说明机制，不是原文实验。</span></div>
   </div>
 
-  <div class="callout note"><span class="ttl">补充：为什么是 3–5 个</span>在默认参数下，每个 Session 每轮占用你约 2.5 分钟（处理 1.5 + 切换 1），每轮约 10 分钟。你的时间大约能撑起 4 个 Session。这和原文观察到的“3 到 5 个”在同一量级。模型越能独立工作，这个数越大；切换代价越高，这个数越小。</div>
+  <div class="callout note"><span class="ttl">补充：为什么是 3–5 个</span>在默认参数下，每个 Session 每轮占用你约 2.5 分钟（处理 1.5 + 切换 1），每轮约 10 分钟。你的时间大约能撑起 4 个 Session。这和原文观察到的“3 到 5 个”在同一量级。<br>注意两个口径不同。“撑起 4 个”指你的时间刚好用满（演示里利用率约 84%）。演示读数里的“约 5 个后增长不到 10%”指总产出开始变平。前者先到，后者稍晚。模型越能独立工作，这个数越大；切换代价越高，这个数越小。</div>
 </section>
 
 <!-- ============ 3 ============ -->
@@ -184,22 +184,22 @@
   <h2><span class="num">07</span>自测与速记</h2>
   <div class="quiz" data-answer="2">
     <div class="q">按原文的说法，在以 Session 为单位的设计下，多任务的上限取决于什么？</div>
-    <div class="opts"><button>模型的上下文长度</button><button>模型的推理能力</button><button>人的注意力</button><button>工具的数量</button></div>
+    <div class="opts"><button>模型的上下文窗口长度</button><button>模型的推理与规划能力</button><button>人的注意力</button><button>可接入的工具与连接器数量</button></div>
     <div class="explain">原文：“单任务的上限取决于模型能力，多任务的上限取决于人的注意力。”一个人通常只能同时跟进 3 到 5 个活跃 Session。</div>
   </div>
   <div class="quiz" data-answer="1">
     <div class="q">下面哪一项<b>不是</b>原文列出的“简单扩展”方案（在本地单会话 Agent 上接 CLI/MCP/连接器）的问题？</div>
-    <div class="opts"><button>单会话同步阻塞</button><button>模型不会调用工具</button><button>多任务上下文混乱</button><button>本地设备离线即停止运行</button></div>
+    <div class="opts"><button>单会话同步阻塞，新消息只能排队</button><button>模型不会调用外部工具</button><button>多任务上下文混在一起</button><button>本地设备离线即停止运行</button></div>
     <div class="explain">原文列的三个问题是：单会话同步阻塞、多任务上下文混乱、本地设备离线即停止运行。单任务 Agent 已经证明了模型调用工具的能力。</div>
   </div>
   <div class="quiz" data-answer="3">
     <div class="q">“主动”这个特征的完整含义是？</div>
-    <div class="opts"><button>收到消息后尽快回复</button><button>每完成一步就通知用户</button><button>同时执行尽可能多的任务</button><button>持续观察环境事件，主动推进值得处理的事；不需要介入时保持安静</button></div>
+    <div class="opts"><button>收到每条消息后都尽快回复，让人知道它在线</button><button>每完成一步就主动通知用户，汇报进展</button><button>同时接下尽可能多的任务，并行推进</button><button>自己发现值得做的事并推进；无事时保持安静</button></div>
     <div class="explain">主动包括两半：自己发现值得做的事，以及没事时不打扰人。人们常常忽略后者。</div>
   </div>
   <div class="quiz" data-answer="0">
     <div class="q">“持久”这个特征主要由哪两个模块支撑？</div>
-    <div class="opts"><button>计算、状态与环境的分离 + Watchdog</button><button>双层架构 + 事件驱动</button><button>事件驱动 + 面向人的交互</button><button>双层架构 + Watchdog</button></div>
+    <div class="opts"><button>计算、状态与环境的分离 + Watchdog</button><button>双层架构 + 计算、状态与环境的分离</button><button>事件驱动 + 面向人的交互</button><button>双层架构 + Watchdog 外部监控与自愈</button></div>
     <div class="explain">原文：通过计算、状态与环境的分离（第 5 节）及 Watchdog（第 6 节），实现跨设备的持久在线与异常自愈。</div>
   </div>
 

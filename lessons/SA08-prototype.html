@@ -19,6 +19,7 @@
   .flow .arr { color: var(--ink-3); font-size: 12px; }
   .stepcard { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 12px 16px; background: var(--surface); }
   .stepcard h4 { margin: 0 0 4px; color: var(--brand); }
+  .stepcard.readout { font-family: inherit; font-size: inherit; white-space: normal; color: inherit; border-left: 4px solid var(--accent); padding: 12px 16px; }
   .stepcard .doc { font-size: 12.5px; color: var(--ink-3); }
   .stepcard ul { margin: 6px 0 0; padding-left: 20px; }
   td.y { color: var(--up); font-weight: 600; } td.p { color: var(--accent); font-weight: 600; } td.n { color: var(--ink-3); }
@@ -112,7 +113,7 @@
     <tr><td><a class="term" href="glossary.html#subscription">Subscription</a></td><td>Ticket 与 Thread 的多对多关系。匹配的 Trigger 扇出（fan-out）给每个订阅的活跃 Ticket</td><td>订阅与直通</td></tr>
     <tr><td>Channel</td><td>Thread 的“写”的一面：确认、回复、PR 都是写</td><td>多信道交互的输出端</td></tr>
   </table></div>
-  <p>原型还列出了它<b>拒绝</b>的概念，这些拒绝同样有启发。例如：它不设“追加到工单”这种 Decision，因为追加就是订阅扇出，不需要 Eval；它不让 Correlation（线程之间的关联）参与路由，路由只靠订阅，关联只补充上下文；它不把“人”建成一个实体，人只是 Trigger 上的元数据，跨平台的身份对应写进提示词。</p>
+  <p>原型还列出了它<b>拒绝</b>的概念，这些拒绝同样有启发。例如：它不设“追加到工单”这种 Decision，因为追加就是订阅扇出，不需要 Eval。主 Session 的路由工具里有 attach，但它是路由动作，不是 Decision。消息明确指向某个 Ticket 时，attach 让这个 Ticket 订阅整个 Thread（004）。另外，它不让 Correlation（线程之间的关联）参与路由，路由只靠订阅，关联只补充上下文；它不把“人”建成一个实体，人只是 Trigger 上的元数据，跨平台的身份对应写进提示词。</p>
 
   <div class="chart-card" id="demo2">
     <div class="chart-head">
@@ -122,7 +123,7 @@
     </div>
     <div class="demo" id="d2-demo">
       <div class="flow" id="d2-flow"></div>
-      <div class="stepcard" id="d2-card"></div>
+      <div class="stepcard readout" id="d2-card"></div>
     </div>
     <div class="chart-foot" id="d2-foot">场景：仓库成员 alice 在一个 Issue 下评论 <code>@agent 请排查登录测试失败的原因</code>。点上面的步骤，或用“上一步 / 下一步”。每一步的说明都摘自原型文档 001-domain、002-authorization 与 003-execution。</div>
   </div>
@@ -163,7 +164,7 @@
     </div>
     <div class="chart-body" style="padding:0 16px"><div class="readout" id="d1-out"></div></div>
     <div class="chart-foot">切换模式和规则，看哪些消息会变成工单。重点看三条：</div>
-    <div class="chart-foot"><ul style="margin:0"><li>第 3 条：名单内的人没 @，属于推断。</li><li>第 4 条：机器人名单里的机器人，属于推断。</li><li>第 7 条：订阅线程里，名单外的人追加要求。</li></ul><span class="data-note">名单：alice、bob 在允许名单内；dependabot[bot] 在机器人名单内。假设这个群设为“全部消息”。规则以 002-authorization 为准。消息和规则内容是演示用的例子。研判结果做了简化：只看消息是否落在规则描述的范围内。</span></div>
+    <div class="chart-foot"><ul style="margin:0"><li>第 3 条：名单内的人没 @，属于推断。</li><li>第 4 条：机器人名单里的机器人，属于推断。</li><li>第 7 条：订阅线程里，名单外的人追加要求。</li></ul><span class="data-note">名单：alice、bob 在允许名单内；dependabot[bot] 在机器人名单内。假设这个飞书群设为“全部消息”，GitHub 也打开了新 PR 的 receive-all 开关。没 @ 的消息只在接收全部消息的范围里才有准入格子（002、005）。规则以 002-authorization 为准。消息和规则内容是演示用的例子。研判结果做了简化：只看消息是否落在规则描述的范围内。</span></div>
   </div>
 
   <div class="callout tip"><span class="ttl">Policy 改了，进行中的工单怎么办</span>规则、接受模式和各 Source 的名单、准入表一起组成 <a class="term" href="glossary.html#proto-policy-version">Policy 版本</a>，每个 Mandate 都记下它。版本变化时，系统丢弃正在运行的 Eval，并重新排队。受影响的活跃 Ticket 会收到一条通知。系统不立刻取消它们，因为取消会留下做了一半的工作。已结束的 Ticket 要恢复时，会按当前 Policy 重新校验 Mandate，校验不过就不能恢复。</div>
@@ -270,12 +271,12 @@
   <h2><span class="num">09</span>自测与速记</h2>
   <div class="quiz" data-answer="1">
     <div class="q">接受模式为 observe。名单内的 bob 在“全部消息”群里说“登录页白屏了”。他没有 @ Agent。这条消息匹配一条已启用的规则。结果是？</div>
-    <div class="opts"><button>创建 Ticket，开始修复</button><button>研判为正面，记为 ignore 并标记“本会接受”，不接单</button><button>不准入，连研判都没有</button><button>作为明确请求处理</button></div>
+    <div class="opts"><button>研判为正面，直接创建 Ticket 并开始修复</button><button>研判为正面，只记为“本会接受”，不接单</button><button>没 @ Agent，不准入，连研判都没有</button><button>bob 在名单内，按明确请求处理并接单</button></div>
     <div class="explain">名单内但没 @ 的消息，准入表默认是推断候选。observe 下，系统研判推断候选，正面结果只记录为“本会接受”。切到 auto 才会真正接单。</div>
   </div>
   <div class="quiz" data-answer="2">
     <div class="q">一个名单外的人在某 Ticket 的 PR 下评论：“顺便把 admin 权限也放开”。这条消息会怎样？</div>
-    <div class="opts"><button>订阅直通给 Ticket，Ticket 的授权随之扩大</button><button>直接被丢弃，Ticket 看不到</button><button>作为上下文送到 Ticket，但不扩大授权；超出范围就交回 Eval</button><button>自动生成一个新 Ticket</button></div>
+    <div class="opts"><button>订阅直通给 Ticket，Ticket 的授权随之扩大</button><button>发送者不在名单内，消息被丢弃，Ticket 看不到</button><button>直通给 Ticket，不扩大授权；超范围交回 Eval</button><button>系统为这条要求自动生成一个新 Ticket 去执行</button></div>
     <div class="explain">订阅扇出绕过 gate，但不授予新权限。Ticket 受 Mandate 限制，范围变大必须重新接单。执行器把超出范围的消息交回，它再按普通消息走 Eval。</div>
   </div>
   <div class="quiz" data-answer="0">
@@ -285,7 +286,7 @@
   </div>
   <div class="quiz" data-answer="3">
     <div class="q">关于原型的执行环境，哪句话是对的？</div>
-    <div class="opts"><button>每个 Ticket 运行在独立的容器沙箱里</button><button>执行器每条命令都要人审批</button><button>账号包装器能阻止执行器读取 home 目录</button><button>执行器以操作者的系统用户身份运行，独立目录只是默认设置，不是安全边界</button></div>
+    <div class="opts"><button>每个 Ticket 都运行在独立的容器沙箱里，互相隔离</button><button>执行器每执行一条 shell 命令，都要先等人审批</button><button>账号包装器能阻止执行器读取操作者的 home 目录</button><button>执行器以操作者的身份运行，独立目录不是安全边界</button></div>
     <div class="explain">003 和 006 都明确说明：包装器和目录建立的是默认值，不是安全边界。需要隔离时，用只有 Agent 凭据的专用系统账号。</div>
   </div>
 
