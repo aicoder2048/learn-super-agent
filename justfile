@@ -3,7 +3,7 @@
 default:
     @just --list
 
-# 启动课程（含 AI 助教）；加 --lecture SA02 同时让 AI 讲师开讲。如：just super-agent-course --lecture SA02 --port 9999
+# 启动课程（含 AI 助教）；加 --lecture [SA02] 同时让 AI 讲师开讲（不写课号从 SA01 开始）。如：just super-agent-course --lecture --port 9999
 [continue]
 super-agent-course *args:
     cd lessons && uv run --no-project python tools/course.py {{args}}

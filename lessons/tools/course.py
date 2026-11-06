@@ -1,6 +1,6 @@
 """启动课程服务，可选同时让 AI 讲师开讲（只用标准库；讲师在它自己的 uv 环境里运行）。
 
-    python tools/course.py [PORT] [--port PORT] [--lecture SA02 [--from s3]]
+    python tools/course.py [PORT] [--port PORT] [--lecture [SA02] [--from s3]]
 
 只开课程时，Ctrl+C 停止。带 --lecture 时，关掉讲课的浏览器窗口或按 Ctrl+C，课程服务也一起停止。
 """
@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 import time
@@ -16,13 +17,15 @@ from pathlib import Path
 
 LESSONS = Path(__file__).resolve().parent.parent
 DEFAULT_PORT = 8766
+FIRST_LESSON = "SA01"
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="just super-agent-course", description="启动 Super-agent 课程，可选 AI 讲师")
     ap.add_argument("pos_port", nargs="?", type=int, metavar="PORT", help="端口（旧写法，等同 --port）")
     ap.add_argument("--port", type=int, default=None, help=f"课程服务端口（默认 {DEFAULT_PORT}）")
-    ap.add_argument("--lecture", metavar="LESSON", help="同时让 AI 讲师开讲这一课，如 SA02")
+    ap.add_argument("--lecture", metavar="LESSON", nargs="?", const=FIRST_LESSON,
+                    help=f"同时让 AI 讲师开讲这一课，如 SA02；不写课号就从 {FIRST_LESSON} 开始")
     ap.add_argument("--from", dest="start", metavar="SECTION", help="讲师从哪个小节开始，如 s3（需配合 --lecture）")
     a = ap.parse_args(argv)
     if a.pos_port and a.port and a.pos_port != a.port:
@@ -34,6 +37,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         ap.error("--from 只能和 --lecture 一起用")
     if a.lecture:
         a.lecture = a.lecture.upper()
+        if not re.fullmatch(r"SA\d\d", a.lecture):
+            ap.error(f"课号不对：{a.lecture}，应该像 SA02 这样")
     return a
 
 

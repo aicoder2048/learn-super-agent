@@ -33,3 +33,13 @@ def test_from_requires_lecture():
 def test_conflicting_ports_rejected():
     with pytest.raises(SystemExit):
         parse_args(["9000", "--port", "9999"])
+
+
+def test_lecture_without_lesson_starts_from_first():
+    a = parse_args(["--lecture", "--port", "9999"])
+    assert (a.lecture, a.port) == ("SA01", 9999)
+
+
+def test_lecture_rejects_bad_lesson_id():
+    with pytest.raises(SystemExit):
+        parse_args(["--lecture", "9999"])
