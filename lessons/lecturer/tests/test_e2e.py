@@ -174,3 +174,42 @@ def test_reexplain_speaks_rewritten_text(tmp_path):
 
     asyncio.run(go())
     assert len({a.name for a in spoken}) >= 2  # 原讲解 + 换个讲法的新音频
+
+
+@live_llm
+def test_student_question_answer_is_read_aloud(tmp_path):
+    long_say = "这是一段很长的讲解。" * 8
+    script = _script(tmp_path, [{"id": "s1-01", "section": "s1", "kind": "say", "target": "#s1 h2", "say": long_say}])
+    aside = []
+
+    async def go():
+        pw, stage, lec = await _open(script)
+        orig = stage.play_aside
+
+        async def spy(a):
+            aside.append(a)
+            await orig(a)
+        stage.play_aside = spy
+        watcher = asyncio.create_task(lec.watch_student_questions())
+        run = asyncio.create_task(lec.run(0))
+        await asyncio.sleep(3)  # 讲师正在讲
+        box = stage.page.locator(".tutor-panel textarea")
+        await box.fill("用一句话解释 Router，50 字以内。")
+        await box.press("Enter")
+        await box.evaluate("el => el.blur()")
+        for _ in range(300):  # 等助教回答开始被朗读
+            if aside:
+                break
+            await asyncio.sleep(0.1)
+        assert aside, "学生提问的回答没有被朗读"
+        assert lec.controls.paused and lec.i == 0  # 讲课自动暂停，还停在原步骤
+        await stage.page.keyboard.press("Space")  # 只打断朗读
+        await asyncio.sleep(0.5)
+        assert lec.reading is None and lec.controls.paused
+        await stage.page.keyboard.press("Space")  # 继续讲课
+        await asyncio.wait_for(run, 60)
+        watcher.cancel()
+        await stage.close()
+        await pw.stop()
+
+    asyncio.run(go())

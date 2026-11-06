@@ -60,6 +60,13 @@ class Stage:
     async def stop_audio(self) -> None:
         await self.page.evaluate("__lecturer.stop()")
 
+    async def play_aside(self, audio: Path) -> None:
+        """另一路音频：朗读学生自己提问的回答，不影响讲师暂停中的那段。"""
+        await self.page.evaluate("u => __lecturer.playAside(u)", f"{self.base}lecturer/audio/{audio.name}")
+
+    async def stop_aside(self) -> None:
+        await self.page.evaluate("__lecturer.stopAside()")
+
     # ---------- 演示 ----------
     async def act(self, action: dict) -> None:
         if "set" in action:
@@ -91,6 +98,9 @@ class Stage:
         await box.press("Enter")
         await box.evaluate("el => el.blur()")  # 交还焦点，让快捷键继续生效
         return before
+
+    async def tutor_answer_count(self) -> int:
+        return await self.page.locator(".tutor-panel .tp-msg.ai").count()
 
     async def tutor_answer(self, before: int) -> tuple[str, bool, str]:
         """读新回答：（目前的正文，是否已答完，错误信息）。"""

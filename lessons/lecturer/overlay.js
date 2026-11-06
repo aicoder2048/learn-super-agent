@@ -25,6 +25,13 @@
   audio.addEventListener("ended", finish);
   audio.addEventListener("error", finish);
 
+  // 第二路音频：朗读学生自己提问的助教回答，不打扰暂停中的讲师音频
+  const aside = new Audio();
+  let asideEnded = null;
+  function finishAside() { const f = asideEnded; asideEnded = null; if (f) f(); }
+  aside.addEventListener("ended", finishAside);
+  aside.addEventListener("error", finishAside);
+
   function send(cmd) { if (window.__lecturerCmd) window.__lecturerCmd(cmd); }
 
   function mount() {
@@ -71,6 +78,15 @@
     pause() { audio.pause(); },
     resume() { if (ended) audio.play().catch(() => finish()); },
     stop() { audio.pause(); finish(); },
+    playAside(url) {
+      finishAside();
+      return new Promise((resolve) => {
+        asideEnded = resolve;
+        aside.src = url;
+        aside.play().catch(() => finishAside());
+      });
+    },
+    stopAside() { aside.pause(); finishAside(); },
     highlight(sel, nth) {
       document.querySelectorAll(".lecturer-focus").forEach((x) => x.classList.remove("lecturer-focus"));
       const el = document.querySelectorAll(sel)[nth || 0];
