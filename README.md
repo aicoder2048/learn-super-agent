@@ -72,6 +72,8 @@ uv run --no-project python tools/serve.py
 
 浏览器打开 **http://127.0.0.1:8766/lessons/** 。换端口：`--port 9000`。按 `Ctrl+C` 停止。
 
+装了 [just](https://github.com/casey/just) 的话，在项目根目录运行 `just super-agent-course`（默认端口 8766），或 `just super-agent-course 9000` 换端口。
+
 > 不想用 AI 助教？直接双击 `lessons/index.html` 也能学，只是右栏助教不可用。
 
 ## 怎样学
