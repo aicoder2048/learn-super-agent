@@ -1,4 +1,4 @@
-# learn-deepseek-super-agent
+# learn-super-agent
 
 **Super-agent 设计课**：一套中文互动自学课程，精读 DeepSeek Harness 团队的文章
 [《Super-agent 设计探索：迈向更自主的 Agent 系统》](https://mp.weixin.qq.com/s/zoS7GlReWPhfCjENGxXCdg)（2026-10-31）。
@@ -34,8 +34,8 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/aicoder2048/learn-deepseek-super-agent.git
-cd learn-deepseek-super-agent
+git clone https://github.com/aicoder2048/learn-super-agent.git
+cd learn-super-agent
 ```
 
 ### 2. 下载原文和配图（第一次使用时做一次）
