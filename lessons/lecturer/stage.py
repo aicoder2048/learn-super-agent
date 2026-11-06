@@ -33,6 +33,9 @@ class Stage:
         await page.goto(base + lesson, wait_until="networkidle")
         return cls(browser, page, base)
 
+    async def goto(self, lesson: str) -> None:
+        await self.page.goto(self.base + lesson, wait_until="networkidle")
+
     async def close(self) -> None:
         await self.browser.close()
 
@@ -72,9 +75,11 @@ class Stage:
         if "set" in action:
             await self.page.eval_on_selector(
                 action["set"],
-                "(el, v) => { el.value = v; el.dispatchEvent(new Event('input', {bubbles: true}));"
+                "(el, v) => { if (el.type === 'checkbox' || el.type === 'radio') el.checked = v === 'true';"
+                " else el.value = v;"
+                " el.dispatchEvent(new Event('input', {bubbles: true}));"
                 " el.dispatchEvent(new Event('change', {bubbles: true})); }",
-                str(action["value"]),
+                str(action["value"]).lower() if isinstance(action["value"], bool) else str(action["value"]),
             )
         elif "click" in action:
             await self.page.click(action["click"])

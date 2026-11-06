@@ -201,6 +201,19 @@ class Lecture:
                 await asyncio.sleep(0.35)  # 步骤之间留一口气
         await self.show("本课讲完了 🎉")
 
+    async def handoff(self, next_id: str, seconds: int = 5) -> None:
+        """讲完一课后倒数几秒进入下一课。学生按空格（或在问助教）就留在本课，再按空格才继续。"""
+        self.controls.take_jump()
+        for left in range(seconds, 0, -1):
+            if self.controls.paused:
+                break
+            await self.show(f"本课讲完了 · {left} 秒后进入 {next_id}，按空格留在本课")
+            await asyncio.sleep(1)
+        if self.controls.paused:
+            await self.show(f"留在本课 · 按空格进入 {next_id}")
+            await self.controls.wait_unpaused()
+        self.controls.take_jump()
+
 
 async def cancel_all(*tasks: asyncio.Task | None) -> None:
     """取消并等待子任务结束，吞掉它们的异常（浏览器可能已经关了）。"""
@@ -226,7 +239,9 @@ def build_rewriters(env: dict[str, str]) -> list[Rewriter]:
     return [first, pick_rewriter({k: v for k, v in env.items() if k != "MOONSHOT_API_KEY"})]
 
 
-async def run_lecture(script: Script, base: str, start: int = 0, headless: bool = False) -> None:
+async def run_lecture(lessons: list[tuple[str, Script]], base: str, start: int = 0,
+                      headless: bool = False) -> None:
+    """按顺序讲 lessons（课号, 讲稿）；讲完一课自动进入下一课。start 只作用于第一课。"""
     env = load_env()
     try:
         require_deepseek(env)
@@ -238,19 +253,28 @@ async def run_lecture(script: Script, base: str, start: int = 0, headless: bool 
     controls = Controls()
     async with async_playwright() as pw:
         holder: dict[str, Lecture] = {}
-        stage = await Stage.open(pw, base, script.lesson,
+        stage = await Stage.open(pw, base, lessons[0][1].lesson,
                                  lambda cmd: asyncio.ensure_future(holder["l"].on_command(cmd)), headless)
-        lecture = holder["l"] = Lecture(script, stage, controls, rewriters)
-        student = asyncio.create_task(lecture.watch_student_questions())
+        lecture: Lecture | None = None
+        student: asyncio.Task | None = None
         try:
-            await lecture.run(start)
+            for k, (lesson_id, script) in enumerate(lessons):
+                if k:
+                    await stage.goto(script.lesson)
+                print(f"[讲师] 开讲 {lesson_id} {script.title}")
+                lecture = holder["l"] = Lecture(script, stage, controls, rewriters)
+                student = asyncio.create_task(lecture.watch_student_questions())
+                await lecture.run(start if k == 0 else 0)
+                if k + 1 < len(lessons):
+                    await lecture.handoff(lessons[k + 1][0])
+                    await cancel_all(student, lecture.reading)
             if not headless:
-                await stage.wait_closed()  # 讲完后，学生的提问照样朗读
+                await stage.wait_closed()  # 全部讲完后，学生的提问照样朗读
         except PlaywrightError as e:
             if "closed" not in str(e).lower():
                 raise
             print("[讲师] 浏览器已关闭，下课。")
         finally:
-            await cancel_all(student, lecture.reading)
+            await cancel_all(student, lecture.reading if lecture else None)
             with contextlib.suppress(Exception):
                 await stage.close()

@@ -213,3 +213,27 @@ def test_student_question_answer_is_read_aloud(tmp_path):
         await pw.stop()
 
     asyncio.run(go())
+
+
+def test_moves_on_to_next_lesson(tmp_path, monkeypatch):
+    import player
+    from script import load_script
+    from stage import Stage
+
+    def tiny(name, lesson, sec):
+        p = tmp_path / f"{name}.json"
+        p.write_text(json.dumps({"lesson": lesson, "title": name, "steps": [
+            {"id": f"{sec}-01", "section": sec, "kind": "say", "target": f"#{sec} h2", "say": "这一课讲完了。"}]},
+            ensure_ascii=False), encoding="utf-8")
+        return load_script(p)
+
+    visited = []
+    orig = Stage.goto
+
+    async def spy(self, lesson):
+        visited.append(lesson)
+        await orig(self, lesson)
+    monkeypatch.setattr(Stage, "goto", spy)
+    lessons = [("SA02", tiny("A", "SA02-two-layer.html", "s1")), ("SA03", tiny("B", "SA03-event-filter-route.html", "s1"))]
+    asyncio.run(asyncio.wait_for(player.run_lecture(lessons, BASE, headless=True), 60))
+    assert visited == ["SA03-event-filter-route.html"]

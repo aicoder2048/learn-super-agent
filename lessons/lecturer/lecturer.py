@@ -1,7 +1,7 @@
 """AI 讲师入口。
 
     uv run lecturer.py audio SA02            预合成一课讲师音频
-    uv run lecturer.py run SA02 [--from s3]  开讲（需先启动 just super-agent-course）
+    uv run lecturer.py run SA02 [--from s3]  开讲，讲完自动进入下一课（需先启动 just super-agent-course）
 """
 
 from __future__ import annotations
@@ -28,6 +28,15 @@ def script_path(lesson_id: str) -> Path:
     return HERE / "scripts" / f"{lesson_id.upper()}.json"
 
 
+def lesson_sequence(first: str, scripts_dir: Path = HERE / "scripts") -> list[str]:
+    """从 first 开始、按课号排序的所有有讲稿的课。讲完一课自动进入下一课。"""
+    first = first.upper()
+    ids = sorted(p.stem for p in scripts_dir.glob("SA*.json"))
+    if first not in ids:
+        raise ScriptError(f"没有 {first} 的讲稿（{scripts_dir}）")
+    return ids[ids.index(first):]
+
+
 async def prepare_audio(script: Script) -> None:
     texts = script.lecturer_texts()
     for i, t in enumerate(texts, 1):
@@ -48,15 +57,17 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     try:
+        if args.cmd == "run":
+            from player import run_lecture
+
+            lessons = [(lid, load_script(script_path(lid))) for lid in lesson_sequence(args.lesson)]
+            start = lessons[0][1].start_index(args.start) if args.start else 0
+            asyncio.run(run_lecture(lessons, course_url(args.port), start))
+            return 0
         script = load_script(script_path(args.lesson))
         if args.cmd == "audio":
             asyncio.run(prepare_audio(script))
             return 0
-        from player import run_lecture
-
-        start = script.start_index(args.start) if args.start else 0
-        asyncio.run(run_lecture(script, course_url(args.port), start))
-        return 0
     except ScriptError as e:
         print(f"讲稿错误：{e}", file=sys.stderr)
         return 2
