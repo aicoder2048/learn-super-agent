@@ -6,8 +6,8 @@
   if (window.__lecturer) return;
 
   const css = `
-  .lecturer-focus { outline: 3px solid #e8a33d; outline-offset: 6px; border-radius: 6px;
-    background: color-mix(in srgb, #e8a33d 8%, transparent); transition: outline-color .3s; }
+  /* 只画外框，不动元素自己的背景和圆角：深色底的 hero 等元素换了背景，浅色文字就看不见了 */
+  .lecturer-focus { outline: 3px solid #e8a33d; outline-offset: 6px; transition: outline-color .3s; }
   .lecturer-bar { position: fixed; left: 20px; bottom: 20px; z-index: 9999; display: flex; gap: 6px; align-items: center;
     padding: 8px 10px; border-radius: 12px; background: rgba(28,32,40,.92); color: #fff;
     font: 13px/1.4 -apple-system, "PingFang SC", sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
