@@ -26,6 +26,20 @@ def test_stream_yields_only_new_complete_sentences():
     assert s.flush() == ["第三"]
 
 
+def test_stream_merges_short_sentence_across_newline():
+    # 助教常以“结论：”开头再换行。短句并入下一句后，原文里夹着换行，定位不能靠回找合并串
+    s = SentenceStream()
+    assert s.feed("结论：\n- 第一点很重要。第二") == ["结论：- 第一点很重要。"]
+    assert s.feed("结论：\n- 第一点很重要。第二点也是。") == ["第二点也是。"]
+    assert s.flush() == []
+
+
+def test_stream_keeps_short_tail_until_it_grows():
+    s = SentenceStream()
+    assert s.feed("是。\n") == []
+    assert s.feed("是。\n不是。") == ["是。不是。"]
+
+
 def test_stream_flush_empty_when_nothing_left():
     s = SentenceStream()
     s.feed("一句完整的话。")

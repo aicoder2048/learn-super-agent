@@ -17,6 +17,7 @@ lessons/.env（不进 git）:
 
 import argparse
 import json
+import posixpath
 import re
 import sys
 import urllib.error
@@ -24,6 +25,7 @@ import urllib.request
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import unquote
 
 LESSONS = Path(__file__).resolve().parent.parent        # lessons/
 ROOT = LESSONS.parent                                    # 项目根目录（静态服务的根）
@@ -80,15 +82,25 @@ SYSTEM = """你是“Super-agent 设计课”的 AI 助教。学员正在浏览�
 """
 
 
-def load_env() -> dict:
+def load_env(path: Path | None = None) -> dict:
+    """读 .env：KEY=value，值两边的引号去掉（和 lecturer/llm.py 一致）。"""
     env = {}
-    f = LESSONS / ".env"
+    f = path or LESSONS / ".env"
     if f.exists():
         for line in f.read_text(encoding="utf-8").splitlines():
             if "=" in line and not line.lstrip().startswith("#"):
                 k, v = line.split("=", 1)
-                env[k.strip()] = v.strip()
+                env[k.strip()] = v.strip().strip("'\"")
     return env
+
+
+def is_hidden_path(path: str) -> bool:
+    """点文件和点目录（.env、.git …）不对外提供。先解码再判断，%2E 绕不过。"""
+    clean = posixpath.normpath(unquote(path.split("?", 1)[0]))
+    return any(seg.startswith(".") for seg in clean.split("/") if seg)
+
+
+LOCAL_HOST = re.compile(r"^(127\.0\.0\.1|localhost)(:\d+)?$")
 
 
 def clip(s, n: int) -> str:
@@ -170,14 +182,21 @@ class Handler(SimpleHTTPRequestHandler):
         origin = self.headers.get("Origin") or ""
         return origin == "" or re.match(r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$", origin) is not None
 
+    def _local_host(self) -> bool:
+        """Host 头必须是本机地址：防止别的网站用 DNS rebinding 冒充本机读课程文件。"""
+        host = self.headers.get("Host") or ""
+        return host == "" or LOCAL_HOST.match(host) is not None
+
     def do_GET(self):
+        if not self._local_host():
+            return self._json(403, {"error": "only local pages may use this server"})
         if self.path in ("/", "/index.html"):
             self.send_response(302)
             self.send_header("Location", "/lessons/")
             return self.end_headers()
         if self.path == "/favicon.ico":
             self.path = "/lessons/assets/favicon.svg"
-        if self.path.startswith("/lessons/.env") or "/." in self.path:
+        if is_hidden_path(self.path):
             return self._json(404, {"error": "not found"})
         if self.path.startswith("/api/tutor/health"):
             key = bool(self.env.get("DEEPSEEK_API_KEY"))
@@ -206,7 +225,7 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if not self.path.startswith("/api/tutor/chat"):
             return self._json(404, {"error": "not found"})
-        if not self._local_origin():
+        if not (self._local_origin() and self._local_host()):
             return self._json(403, {"error": "only local pages may call the tutor"})
         key = self.env.get("DEEPSEEK_API_KEY")
         if not key:

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
-from course import default_port, first_lesson, parse_args  # noqa: E402
+from course import default_port, first_lesson, parse_args, ready_url  # noqa: E402
 
 
 def parse(argv):
@@ -58,6 +58,10 @@ def test_first_lesson_is_lowest_script(tmp_path):
 
 def test_first_lesson_none_without_scripts(tmp_path):
     assert first_lesson(tmp_path) is None
+
+
+def test_ready_url_uses_the_real_lessons_dir_name():
+    assert ready_url(9000, "course") == "http://127.0.0.1:9000/course/"
 
 
 def test_default_port_reads_manifest(tmp_path):

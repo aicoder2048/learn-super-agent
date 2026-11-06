@@ -62,8 +62,13 @@ def parse_args(argv: list[str], port: int | None = None, first: str | None = Non
     return a
 
 
+def ready_url(port: int, lessons_dir: str = LESSONS.name) -> str:
+    """探测课程服务是否就绪的地址：课程目录名和 serve.py 一样取自磁盘，不写死 lessons。"""
+    return f"http://127.0.0.1:{port}/{lessons_dir}/"
+
+
 def wait_ready(port: int, server: subprocess.Popen, timeout: float = 15) -> None:
-    url = f"http://127.0.0.1:{port}/lessons/"
+    url = ready_url(port)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if server.poll() is not None:

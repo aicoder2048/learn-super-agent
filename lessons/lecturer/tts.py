@@ -30,35 +30,37 @@ def clean_text(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
-def _raw_sentences(text: str) -> tuple[list[str], str]:
-    """切出完整句子，返回（句子列表，剩下的不完整尾巴）。"""
+def _raw_sentences(text: str) -> tuple[list[tuple[str, int]], str]:
+    """切出完整句子，返回（[(句子, 它在 text 里的结束偏移)]，剩下的不完整尾巴）。"""
     out, buf = [], ""
-    for ch in text:
+    for i, ch in enumerate(text):
         buf += ch
         if ch in _END:
             if buf.strip():
-                out.append(buf.strip())
+                out.append((buf.strip(), i + 1))
             buf = ""
     return out, buf
 
 
-def _merge(sents: list[str]) -> tuple[list[str], str]:
-    """把太短的句子并到下一句。返回（合并后的句子，不够长的尾巴）。"""
+def _merge(sents: list[str]) -> tuple[list[str], str, int]:
+    """把太短的句子并到下一句。返回（合并后的句子，不够长的尾巴，并进结果的原句数）。"""
     out: list[str] = []
-    carry = ""
-    for s in sents:
+    carry, used = "", 0
+    for k, s in enumerate(sents):
         carry += s
         if len(carry) >= _MIN_LEN:
             out.append(carry)
             carry = ""
-    return out, carry
+            used = k + 1
+    return out, carry, used
 
 
 def split_sentences(text: str) -> list[str]:
-    sents, tail = _raw_sentences(text)
+    raw, tail = _raw_sentences(text)
+    sents = [s for s, _ in raw]
     if tail.strip():
         sents.append(tail.strip())
-    out, carry = _merge(sents)
+    out, carry, _ = _merge(sents)
     return out + [carry] if carry else out
 
 
@@ -71,15 +73,11 @@ class SentenceStream:
 
     def feed(self, text_so_far: str) -> list[str]:
         self._last = text_so_far
-        sents, _ = _raw_sentences(text_so_far[self._done:])
-        ready, _ = _merge(sents)
-        if ready:
-            # 按原文定位，跳过句间空白
-            rest = text_so_far[self._done:]
-            consumed = 0
-            for s in ready:
-                consumed = rest.index(s, consumed) + len(s)
-            self._done += consumed
+        raw, _ = _raw_sentences(text_so_far[self._done:])
+        ready, _, used = _merge([s for s, _ in raw])
+        if used:
+            # 按原始句子的结束偏移推进：合并后的句子去掉了句间的换行和空白，不能拿它回原文找
+            self._done += raw[used - 1][1]
         return ready
 
     def flush(self) -> list[str]:
