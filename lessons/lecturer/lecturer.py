@@ -15,6 +15,13 @@ from script import Script, ScriptError, load_script
 from tts import LECTURER_VOICE, synthesize
 
 HERE = Path(__file__).parent
+DEFAULT_PORT = 8766
+
+
+def course_url(port: int) -> str:
+    if not 1 <= port <= 65535:
+        raise SystemExit(f"端口号不合法：{port}")
+    return f"http://127.0.0.1:{port}/lessons/"
 
 
 def script_path(lesson_id: str) -> Path:
@@ -36,7 +43,8 @@ def main(argv: list[str] | None = None) -> int:
     r = sub.add_parser("run", help="开讲")
     r.add_argument("lesson")
     r.add_argument("--from", dest="start", default=None, help="从哪个小节开始，如 s3")
-    r.add_argument("--base", default="http://127.0.0.1:8766/lessons/", help="课程地址")
+    r.add_argument("--port", type=int, default=DEFAULT_PORT,
+                   help=f"课程服务端口，要和 just super-agent-course 用的一致（默认 {DEFAULT_PORT}）")
     args = ap.parse_args(argv)
 
     try:
@@ -47,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         from player import run_lecture
 
         start = script.start_index(args.start) if args.start else 0
-        asyncio.run(run_lecture(script, args.base, start))
+        asyncio.run(run_lecture(script, course_url(args.port), start))
         return 0
     except ScriptError as e:
         print(f"讲稿错误：{e}", file=sys.stderr)

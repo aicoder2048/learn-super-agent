@@ -6,7 +6,7 @@ import urllib.request
 
 import pytest
 
-BASE = "http://127.0.0.1:8766/lessons/"
+BASE = "http://127.0.0.1:" + __import__("os").environ.get("LECTURER_TEST_PORT", "8766") + "/lessons/"
 
 
 def server_up() -> bool:

@@ -86,6 +86,13 @@ just lecture-audio SA02   # 第一次：预合成讲师语音（约 1 分钟，�
 just lecture SA02         # 终端 2：开讲；从某个小节开始：just lecture SA02 --from s4
 ```
 
+课程服务换了端口时，讲师要用同一个端口：
+
+```bash
+just super-agent-course 9000
+just lecture SA02 --port 9000
+```
+
 - 控制：页面左下角有控制条。空格暂停/继续，←/→ 上一步/下一步，`R` 换个讲法，`Esc` 离开输入框。
 - 随时可以在右栏问助教（可以用语音输入工具口述）。讲师会自动暂停，用助教的声音读出回答。朗读时按空格停止朗读；再按空格继续讲课。提问后按 `Esc` 离开输入框，快捷键才会生效。
 - 需要 `lessons/.env` 里的 `DEEPSEEK_API_KEY`。可选配 `MOONSHOT_API_KEY`（Kimi Code key）：配了以后，"换个讲法"用 Kimi，否则用 DeepSeek。

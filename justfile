@@ -11,6 +11,6 @@ super-agent-course port="8766":
 lecture-audio lesson:
     cd lessons/lecturer && uv run lecturer.py audio {{lesson}}
 
-# AI 讲师开讲（先在另一个终端运行 just super-agent-course），如：just lecture SA02 --from s3
+# AI 讲师开讲（先在另一个终端运行 just super-agent-course），如：just lecture SA02 --from s3 --port 9000
 lecture lesson *args:
     cd lessons/lecturer && uv run lecturer.py run {{lesson}} {{args}}
