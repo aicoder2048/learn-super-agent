@@ -9,3 +9,7 @@ docs/articles/super-agent-design-exploration.original.html
 docs/articles/img/
 lessons/img/
 docs/articles/*.pdf
+
+# AI 讲师：本地合成的音频与虚拟环境
+lessons/lecturer/audio/
+lessons/lecturer/.venv/
