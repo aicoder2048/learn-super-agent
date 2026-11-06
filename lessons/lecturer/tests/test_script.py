@@ -6,13 +6,13 @@ from script import ScriptError, load_script
 
 
 def write(tmp_path, data):
-    p = tmp_path / "SA99.json"
+    p = tmp_path / "L99.json"
     p.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return p
 
 
 def base(steps):
-    return {"lesson": "SA99-test.html", "title": "测试课", "steps": steps}
+    return {"lesson": "L99-test.html", "title": "测试课", "steps": steps}
 
 
 SAY = {"id": "s1-01", "section": "s1", "kind": "say", "target": "#s1 h2", "say": "我们开始。"}

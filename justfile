@@ -8,9 +8,13 @@ default:
 super-agent-course *args:
     cd lessons && uv run --no-project python tools/course.py {{args}}
 
-# 预合成一课的 AI 讲师音频，如：just lecture-audio SA02
-lecture-audio lesson:
-    cd lessons/lecturer && uv run lecturer.py audio {{lesson}}
+# 预合成 AI 讲师音频；不写课号 = 全部。如：just lecture-audio SA02
+lecture-audio *lessons:
+    cd lessons/lecturer && uv run lecturer.py audio {{lessons}}
+
+# 讲稿自检（不用启动服务，不调用模型）；不写课号 = 全部。如：just lecture-check SA02 --readouts
+lecture-check *args:
+    cd lessons/lecturer && uv run lecturer.py check {{args}}
 
 # AI 讲师开讲（先在另一个终端运行 just super-agent-course），如：just lecture SA02 --from s3 --port 9000
 [continue]

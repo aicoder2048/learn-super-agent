@@ -1,7 +1,7 @@
 [project]
 name = "lecturer"
 version = "0.1.0"
-description = "AI 讲师：用 Playwright 带学生走读 Super-agent 互动课程，并语音讲解"
+description = "AI 讲师：用 Playwright 带学生走读互动课程，并语音讲解"
 requires-python = ">=3.11"
 dependencies = [
     "edge-tts>=7.0",

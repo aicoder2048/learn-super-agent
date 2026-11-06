@@ -1,45 +1,66 @@
+import json
 import sys
 from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
-from course import parse_args  # noqa: E402
+from course import default_port, first_lesson, parse_args  # noqa: E402
 
 
-def test_defaults_to_course_only_on_8766():
-    a = parse_args([])
+def parse(argv):
+    return parse_args(argv, port=8766, first="L01")
+
+
+def test_defaults_to_course_only_on_default_port():
+    a = parse([])
     assert a.port == 8766 and a.lecture is None
 
 
 def test_positional_port_still_works():
-    assert parse_args(["9999"]).port == 9999
+    assert parse(["9999"]).port == 9999
 
 
 def test_port_flag():
-    assert parse_args(["--port", "9999"]).port == 9999
+    assert parse(["--port", "9999"]).port == 9999
 
 
 def test_lecture_with_lesson_and_start():
-    a = parse_args(["--lecture", "sa02", "--port", "9999", "--from", "s3"])
-    assert (a.lecture, a.port, a.start) == ("SA02", 9999, "s3")
+    a = parse(["--lecture", "l02", "--port", "9999", "--from", "s3"])
+    assert (a.lecture, a.port, a.start) == ("L02", 9999, "s3")
 
 
 def test_from_requires_lecture():
     with pytest.raises(SystemExit):
-        parse_args(["--from", "s3"])
+        parse(["--from", "s3"])
 
 
 def test_conflicting_ports_rejected():
     with pytest.raises(SystemExit):
-        parse_args(["9000", "--port", "9999"])
+        parse(["9000", "--port", "9999"])
 
 
 def test_lecture_without_lesson_starts_from_first():
-    a = parse_args(["--lecture", "--port", "9999"])
-    assert (a.lecture, a.port) == ("SA01", 9999)
+    a = parse(["--lecture", "--port", "9999"])
+    assert (a.lecture, a.port) == ("L01", 9999)
 
 
 def test_lecture_rejects_bad_lesson_id():
     with pytest.raises(SystemExit):
-        parse_args(["--lecture", "9999"])
+        parse(["--lecture", "9999"])
+
+
+def test_first_lesson_is_lowest_script(tmp_path):
+    for n in ("L03", "L01"):
+        (tmp_path / f"{n}.json").write_text("{}")
+    assert first_lesson(tmp_path) == "L01"
+
+
+def test_first_lesson_none_without_scripts(tmp_path):
+    assert first_lesson(tmp_path) is None
+
+
+def test_default_port_reads_manifest(tmp_path):
+    m = tmp_path / "sources.json"
+    m.write_text(json.dumps({"course": {"port": 9123}}))
+    assert default_port(m) == 9123

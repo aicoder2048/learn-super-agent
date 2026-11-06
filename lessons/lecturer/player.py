@@ -227,8 +227,8 @@ def check_server(base: str) -> None:
     try:
         urllib.request.urlopen(base, timeout=3).close()
     except OSError as e:
-        raise SystemExit(f"连不上课程服务 {base}（{e}）。请先在另一个终端运行 just super-agent-course；"
-                         "如果课程服务用了别的端口，给讲师加上同样的 --port。")
+        raise SystemExit(f"连不上课程服务 {base}（{e}）。请先启动课程服务（tools/serve.py），"
+                         "或者用 tools/course.py --lecture 一条命令同时启动；端口不一样时给讲师加上同样的 --port。")
 
 
 def build_rewriters(env: dict[str, str]) -> list[Rewriter]:

@@ -21,15 +21,15 @@ def lecture():
 
 def test_handoff_counts_down_then_moves_on():
     lec, stage = lecture()
-    asyncio.run(asyncio.wait_for(lec.handoff("SA03", seconds=2), 5))
-    assert any("2 秒后进入 SA03" in n for n in stage.notes)
+    asyncio.run(asyncio.wait_for(lec.handoff("L03", seconds=2), 5))
+    assert any("2 秒后进入 L03" in n for n in stage.notes)
 
 
 def test_space_during_countdown_stays_until_resumed():
     lec, stage = lecture()
 
     async def go():
-        task = asyncio.create_task(lec.handoff("SA03", seconds=3))
+        task = asyncio.create_task(lec.handoff("L03", seconds=3))
         await asyncio.sleep(0.2)
         lec.controls.command("toggle")  # 学生按空格：留在本课
         await asyncio.sleep(3.5)
