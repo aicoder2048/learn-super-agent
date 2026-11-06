@@ -8,6 +8,11 @@ from script import Script, Step
 class FakeStage:
     def __init__(self):
         self.notes = []
+        self.wandered_to = None
+        self._never = asyncio.Event()
+
+    async def wait_wandered(self):
+        await self._never.wait()
 
     async def status(self, html, paused, can_reexplain):
         self.notes.append(html)

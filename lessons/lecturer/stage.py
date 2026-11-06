@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlparse
 
-from playwright.async_api import Browser, Page, Playwright
+from playwright.async_api import Browser, Frame, Page, Playwright
+from playwright.async_api import Error as PlaywrightError
 
 OVERLAY = Path(__file__).with_name("overlay.js")
 LAUNCH_ARGS = ["--autoplay-policy=no-user-gesture-required", "--window-size=1500,960"]
@@ -18,9 +22,46 @@ async def _launch(pw: Playwright, headless: bool) -> Browser:
         return await pw.chromium.launch(headless=headless, args=LAUNCH_ARGS)
 
 
+def page_file(url: str) -> str:
+    """网址里的页面文件名，不含 #小节 和 ?参数。"""
+    return urlparse(url).path.rsplit("/", 1)[-1]
+
+
+def is_navigation_error(e: Exception) -> bool:
+    """页面跳走时，正在执行的页面脚本会报这类错。"""
+    msg = str(e)
+    return "Execution context was destroyed" in msg or "navigat" in msg.lower()
+
+
 class Stage:
     def __init__(self, browser: Browser, page: Page, base: str) -> None:
         self.browser, self.page, self.base = browser, page, base
+        self.current = ""                      # 页面现在是哪个文件
+        self.wandered_to: str | None = None    # 学生自己打开的页面（不是讲师 goto 的）
+        self._wander = asyncio.Event()
+        page.on("framenavigated", self._on_navigated)
+
+    def _on_navigated(self, frame: Frame) -> None:
+        if frame.parent_frame is not None:
+            return
+        f = page_file(frame.url)
+        if f and f != self.current:  # 同一页里跳 #小节 不算
+            self.current = f
+            self.wandered_to = f
+            self._wander.set()
+
+    def take_wandered(self) -> str | None:
+        f, self.wandered_to = self.wandered_to, None
+        self._wander.clear()
+        return f
+
+    async def wait_wandered(self) -> None:
+        await self._wander.wait()
+
+    async def settle(self) -> None:
+        """等学生打开的新页面加载完。"""
+        with contextlib.suppress(PlaywrightError):
+            await self.page.wait_for_load_state("networkidle")
 
     @classmethod
     async def open(cls, pw: Playwright, base: str, lesson: str,
@@ -29,11 +70,12 @@ class Stage:
         ctx = await browser.new_context(no_viewport=True)
         await ctx.add_init_script(path=str(OVERLAY))
         await ctx.expose_binding("__lecturerCmd", lambda _src, cmd: on_cmd(cmd))
-        page = await ctx.new_page()
-        await page.goto(base + lesson, wait_until="networkidle")
-        return cls(browser, page, base)
+        stage = cls(browser, await ctx.new_page(), base)
+        await stage.goto(lesson)
+        return stage
 
     async def goto(self, lesson: str) -> None:
+        self.current = page_file(lesson)  # 先记下，自己的跳转不算学生换页
         await self.page.goto(self.base + lesson, wait_until="networkidle")
 
     async def close(self) -> None:
@@ -41,6 +83,15 @@ class Stage:
 
     async def wait_closed(self) -> None:
         await self.page.wait_for_event("close", timeout=0)
+
+    async def wait_closed_or_wandered(self) -> bool:
+        """讲完以后：学生关窗口返回 False，打开别的页面返回 True。"""
+        closed = asyncio.ensure_future(self.wait_closed())
+        wander = asyncio.ensure_future(self.wait_wandered())
+        done, pending = await asyncio.wait({closed, wander}, return_when=asyncio.FIRST_COMPLETED)
+        for t in pending:
+            t.cancel()
+        return wander in done and not closed.done()
 
     # ---------- 讲台反馈 ----------
     async def highlight(self, target: str, nth: int = 0) -> bool:

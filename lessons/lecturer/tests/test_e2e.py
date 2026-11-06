@@ -236,4 +236,4 @@ def test_moves_on_to_next_lesson(tmp_path, monkeypatch):
     monkeypatch.setattr(Stage, "goto", spy)
     lessons = [("SA02", tiny("A", "SA02-two-layer.html", "s1")), ("SA03", tiny("B", "SA03-event-filter-route.html", "s1"))]
     asyncio.run(asyncio.wait_for(player.run_lecture(lessons, BASE, headless=True), 60))
-    assert visited == ["SA03-event-filter-route.html"]
+    assert visited == ["SA02-two-layer.html", "SA03-event-filter-route.html"]  # 打开第一课也走 goto

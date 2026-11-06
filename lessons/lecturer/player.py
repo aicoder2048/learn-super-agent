@@ -13,7 +13,7 @@ from playwright.async_api import async_playwright
 from controls import Controls, next_index
 from llm import ConfigError, Rewriter, load_env, pick_rewriter, require_deepseek, rewrite
 from script import Script, Step
-from stage import Stage
+from stage import Stage, is_navigation_error
 from tts import LECTURER_VOICE, TUTOR_VOICE, SentenceStream, synthesize
 
 TUTOR_TIMEOUT = 120  # 秒
@@ -49,7 +49,8 @@ class Lecture:
         was = self.controls.paused
         self.controls.command(cmd)
         if self.controls.paused != was:
-            await (self.stage.pause_audio() if self.controls.paused else self.stage.resume_audio())
+            with contextlib.suppress(PlaywrightError):  # 页面可能正在跳转
+                await (self.stage.pause_audio() if self.controls.paused else self.stage.resume_audio())
         await self.show()
 
     # ---------- 讲 ----------
@@ -114,7 +115,10 @@ class Lecture:
         self.known_answers = await self.stage.tutor_answer_count()
         while True:
             await asyncio.sleep(0.5)
-            count = await self.stage.tutor_answer_count()
+            try:
+                count = await self.stage.tutor_answer_count()
+            except PlaywrightError:  # 页面正在跳转，下一轮再看
+                continue
             if self.proxy_active or count <= self.known_answers:
                 if not self.proxy_active:
                     self.known_answers = min(self.known_answers, count)  # 学生清空过对话
@@ -173,7 +177,8 @@ class Lecture:
             await self.speak(step.explain)
 
     # ---------- 主循环 ----------
-    async def run(self, start: int) -> None:
+    async def run(self, start: int) -> str | None:
+        """讲完返回 None；学生中途自己打开了别的页面，返回那个页面的文件名（self.i 停在没讲完的那步）。"""
         steps = self.script.steps
         self.i = start
         while self.i < len(steps):
@@ -181,38 +186,64 @@ class Lecture:
             await self.show()
             work = asyncio.create_task(self.perform(steps[self.i]))
             jump = asyncio.create_task(self.controls.wait_jump())
+            nav = asyncio.create_task(self.stage.wait_wandered())
             try:
-                done, _ = await asyncio.wait({work, jump}, return_when=asyncio.FIRST_COMPLETED)
+                done, _ = await asyncio.wait({work, jump, nav}, return_when=asyncio.FIRST_COMPLETED)
             except asyncio.CancelledError:  # Ctrl+C：连同子任务一起收拾干净
-                await cancel_all(work, jump)
+                await cancel_all(work, jump, nav)
                 raise
+            if nav in done:
+                await cancel_all(work, jump)
+                return self.stage.take_wandered()
             if jump in done:
-                work.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await work
-                await self.stage.stop_audio()
+                await cancel_all(work, nav)
+                with contextlib.suppress(PlaywrightError):
+                    await self.stage.stop_audio()
                 cmd = self.controls.take_jump() or "next"
                 self.reexplain = cmd == "reexplain" and bool(self.rewriters)
                 self.i = next_index(self.i, cmd, len(steps))
-            else:
-                jump.cancel()
+                continue
+            await cancel_all(jump, nav)
+            try:
                 work.result()  # 让步骤里的异常浮上来
-                self.i += 1
-                await asyncio.sleep(0.35)  # 步骤之间留一口气
+            except PlaywrightError as e:
+                if not is_navigation_error(e):
+                    raise
+                await asyncio.sleep(0.5)  # 跳转事件可能比报错晚到
+                if self.stage.wandered_to:
+                    return self.stage.take_wandered()
+                await self.stage.settle()  # 学生刷新了本页：重讲这一步
+                continue
+            self.i += 1
+            await asyncio.sleep(0.35)  # 步骤之间留一口气
         await self.show("本课讲完了 🎉")
+        return None
 
-    async def handoff(self, next_id: str, seconds: int = 5) -> None:
-        """讲完一课后倒数几秒进入下一课。学生按空格（或在问助教）就留在本课，再按空格才继续。"""
+    async def handoff(self, next_id: str, seconds: int = 5) -> str | None:
+        """讲完一课后倒数几秒进入下一课。学生按空格（或在问助教）就留在本课，再按空格才继续。
+
+        倒数时学生自己打开了别的页面，返回那个页面的文件名，不再进入下一课。
+        """
         self.controls.take_jump()
         for left in range(seconds, 0, -1):
-            if self.controls.paused:
+            if self.controls.paused or self.stage.wandered_to:
                 break
             await self.show(f"本课讲完了 · {left} 秒后进入 {next_id}，按空格留在本课")
-            await asyncio.sleep(1)
-        if self.controls.paused:
+            await first_of(asyncio.sleep(1), self.stage.wait_wandered())
+        if self.controls.paused and not self.stage.wandered_to:
             await self.show(f"留在本课 · 按空格进入 {next_id}")
-            await self.controls.wait_unpaused()
+            await first_of(self.controls.wait_unpaused(), self.stage.wait_wandered())
         self.controls.take_jump()
+        return self.stage.take_wandered() if self.stage.wandered_to else None
+
+
+async def first_of(*aws) -> None:
+    """等其中任意一个完成，其余的取消。"""
+    tasks = [asyncio.ensure_future(a) for a in aws]
+    try:
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        await cancel_all(*tasks)
 
 
 async def cancel_all(*tasks: asyncio.Task | None) -> None:
@@ -240,8 +271,16 @@ def build_rewriters(env: dict[str, str]) -> list[Rewriter]:
 
 
 async def run_lecture(lessons: list[tuple[str, Script]], base: str, start: int = 0,
-                      headless: bool = False) -> None:
-    """按顺序讲 lessons（课号, 讲稿）；讲完一课自动进入下一课。start 只作用于第一课。"""
+                      headless: bool = False, catalog: list[tuple[str, Script]] | None = None) -> None:
+    """从 lessons[0] 开讲，讲完一课自动进入下一课。start 只作用于第一课。
+
+    catalog 是所有有讲稿的课（按课号排序），默认等于 lessons。学生中途自己打开别的页面时：
+    那一页有讲稿，讲师就跟过去讲（讲到一半离开的课，回来接着讲）；没有讲稿，讲师暂停等他。
+    """
+    catalog = catalog or lessons
+    by_id = dict(catalog)
+    order = [lid for lid, _ in catalog]
+    by_file = {s.lesson: lid for lid, s in catalog}
     env = load_env()
     try:
         require_deepseek(env)
@@ -251,25 +290,62 @@ async def run_lecture(lessons: list[tuple[str, Script]], base: str, start: int =
     rewriters = build_rewriters(env)
     print(f"[讲师] 换个讲法使用：{' → '.join(r.name for r in rewriters)}")
     controls = Controls()
+    progress: dict[str, int] = {}  # 讲到一半被学生离开的课 → 停在第几步
+
     async with async_playwright() as pw:
         holder: dict[str, Lecture] = {}
         stage = await Stage.open(pw, base, lessons[0][1].lesson,
                                  lambda cmd: asyncio.ensure_future(holder["l"].on_command(cmd)), headless)
+
+        async def follow(prev: str, file: str) -> tuple[str, int]:
+            """学生打开了 file。返回接下来讲哪一课、从第几步讲。"""
+            while True:
+                await stage.settle()
+                lid = by_file.get(file)
+                if lid:
+                    print(f"[讲师] 学生打开了 {lid}，跟过去讲")
+                    controls.take_jump()
+                    controls.resume()
+                    return lid, progress.get(lid, 0)
+                controls.pause()
+                with contextlib.suppress(PlaywrightError):
+                    await stage.status(f"<b>讲师</b> · 这一页没有讲稿 · 按空格回到 {prev} 接着讲，或者打开别的课",
+                                       True, False)
+                await first_of(controls.wait_unpaused(), stage.wait_wandered())
+                if stage.wandered_to:
+                    file = stage.take_wandered()
+                    continue
+                return prev, progress.get(prev, 0)
+
         lecture: Lecture | None = None
         student: asyncio.Task | None = None
+        cur, i0 = lessons[0][0], start
         try:
-            for k, (lesson_id, script) in enumerate(lessons):
-                if k:
+            while True:
+                script = by_id[cur]
+                if stage.current != script.lesson:
                     await stage.goto(script.lesson)
-                print(f"[讲师] 开讲 {lesson_id} {script.title}")
+                print(f"[讲师] 开讲 {cur} {script.title}" + (f"（从第 {i0 + 1} 步接着讲）" if i0 else ""))
                 lecture = holder["l"] = Lecture(script, stage, controls, rewriters)
                 student = asyncio.create_task(lecture.watch_student_questions())
-                await lecture.run(start if k == 0 else 0)
-                if k + 1 < len(lessons):
-                    await lecture.handoff(lessons[k + 1][0])
-                    await cancel_all(student, lecture.reading)
-            if not headless:
-                await stage.wait_closed()  # 全部讲完后，学生的提问照样朗读
+                wandered = await lecture.run(i0)
+                if wandered:
+                    progress[cur] = lecture.i
+                else:
+                    progress.pop(cur, None)
+                    k = order.index(cur)
+                    if k + 1 < len(order):
+                        wandered = await lecture.handoff(order[k + 1])
+                        if not wandered:
+                            await cancel_all(student, lecture.reading)
+                            cur, i0 = order[k + 1], 0
+                            continue
+                    elif headless or not await stage.wait_closed_or_wandered():
+                        break  # 全部讲完；学生的提问照样朗读，直到关窗口
+                    else:
+                        wandered = stage.take_wandered()
+                await cancel_all(student, lecture.reading)
+                cur, i0 = await follow(cur, wandered)
         except PlaywrightError as e:
             if "closed" not in str(e).lower():
                 raise

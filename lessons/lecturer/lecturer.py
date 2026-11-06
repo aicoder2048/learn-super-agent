@@ -122,8 +122,9 @@ def main(argv: list[str] | None = None) -> int:
         from player import run_lecture
 
         lessons = [(lid, load_script(script_path(lid))) for lid in lesson_sequence(args.lesson)]
+        catalog = [(lid, load_script(script_path(lid))) for lid in all_lessons()]
         start = lessons[0][1].start_index(args.start) if args.start else 0
-        asyncio.run(run_lecture(lessons, course_url(args.port or default_port()), start))
+        asyncio.run(run_lecture(lessons, course_url(args.port or default_port()), start, catalog=catalog))
         return 0
     except ScriptError as e:
         print(f"讲稿错误：{e}", file=sys.stderr)
