@@ -76,6 +76,21 @@ uv run --no-project python tools/serve.py
 
 > 不想用 AI 助教？直接双击 `lessons/index.html` 也能学，只是右栏助教不可用。
 
+## AI 讲师（试验中，目前只有 SA02）
+
+AI 讲师会打开一个 Chrome 窗口，带你走读课程：滚动到正在讲的段落并高亮，亲手拖动演示，用语音讲解。遇到常见疑问，它会在右栏公开向 AI 助教提问，并用另一个声音读出助教的回答。
+
+```bash
+just super-agent-course   # 终端 1：启动课程服务
+just lecture-audio SA02   # 第一次：预合成讲师语音（约 1 分钟，需联网）
+just lecture SA02         # 终端 2：开讲；从某个小节开始：just lecture SA02 --from s4
+```
+
+- 控制：页面左下角有控制条。空格暂停/继续，←/→ 上一步/下一步，`R` 换个讲法，`Esc` 离开输入框。
+- 暂停后可以直接在右栏问助教；问完按 `Esc`，再按空格继续。
+- 需要 `lessons/.env` 里的 `DEEPSEEK_API_KEY`。可选配 `MOONSHOT_API_KEY`（Kimi Code key）：配了以后，"换个讲法"用 Kimi，否则用 DeepSeek。
+- 讲稿怎么写，见 `lessons/lecturer/AUTHORING.md`。
+
 ## 怎样学
 
 1. 按 1 → 4 步的顺序学。每课先读“学完本课，你能够”。
