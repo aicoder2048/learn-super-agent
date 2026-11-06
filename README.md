@@ -28,6 +28,7 @@
 ### 0. 准备
 
 - [uv](https://docs.astral.sh/uv/)（运行 Python 脚本）
+- [just](https://just.systems) 1.54 或更高版本（运行 `just` 命令；旧版本读不了 justfile，用 `brew upgrade just` 升级）
 - 现代浏览器（Chrome / Edge / Safari / Firefox）
 - 一个 DeepSeek API key（只有 AI 助教需要）
 

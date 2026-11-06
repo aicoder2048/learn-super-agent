@@ -181,7 +181,11 @@ class Lecture:
             await self.show()
             work = asyncio.create_task(self.perform(steps[self.i]))
             jump = asyncio.create_task(self.controls.wait_jump())
-            done, _ = await asyncio.wait({work, jump}, return_when=asyncio.FIRST_COMPLETED)
+            try:
+                done, _ = await asyncio.wait({work, jump}, return_when=asyncio.FIRST_COMPLETED)
+            except asyncio.CancelledError:  # Ctrl+C：连同子任务一起收拾干净
+                await cancel_all(work, jump)
+                raise
             if jump in done:
                 work.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -196,6 +200,14 @@ class Lecture:
                 self.i += 1
                 await asyncio.sleep(0.35)  # 步骤之间留一口气
         await self.show("本课讲完了 🎉")
+
+
+async def cancel_all(*tasks: asyncio.Task | None) -> None:
+    """取消并等待子任务结束，吞掉它们的异常（浏览器可能已经关了）。"""
+    live = [t for t in tasks if t and not t.done()]
+    for t in live:
+        t.cancel()
+    await asyncio.gather(*[t for t in tasks if t], return_exceptions=True)
 
 
 def check_server(base: str) -> None:
@@ -239,6 +251,6 @@ async def run_lecture(script: Script, base: str, start: int = 0, headless: bool 
                 raise
             print("[讲师] 浏览器已关闭，下课。")
         finally:
-            student.cancel()
+            await cancel_all(student, lecture.reading)
             with contextlib.suppress(Exception):
                 await stage.close()

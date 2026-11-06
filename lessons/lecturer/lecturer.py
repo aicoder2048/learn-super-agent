@@ -60,8 +60,9 @@ def main(argv: list[str] | None = None) -> int:
     except ScriptError as e:
         print(f"讲稿错误：{e}", file=sys.stderr)
         return 2
-    except KeyboardInterrupt:
-        return 130
+    except KeyboardInterrupt:  # Ctrl+C 是正常下课
+        print("\n[讲师] 下课。")
+        return 0
 
 
 if __name__ == "__main__":
