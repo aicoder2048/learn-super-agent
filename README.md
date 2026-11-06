@@ -73,26 +73,25 @@ uv run --no-project python tools/serve.py
 
 浏览器打开 **http://127.0.0.1:8766/lessons/** 。换端口：`--port 9000`。按 `Ctrl+C` 停止。
 
-装了 [just](https://github.com/casey/just) 的话，在项目根目录运行 `just super-agent-course`（默认端口 8766），或 `just super-agent-course 9000` 换端口。
+装了 [just](https://github.com/casey/just) 的话，在项目根目录运行 `just super-agent-course`（默认端口 8766），或 `just super-agent-course --port 9000` 换端口。
 
 > 不想用 AI 助教？直接双击 `lessons/index.html` 也能学，只是右栏助教不可用。
 
-## AI 讲师（试验中，目前只有 SA02）
+## AI 讲师（试验中）
 
-AI 讲师会打开一个 Chrome 窗口，带你走读课程：滚动到正在讲的段落并高亮，亲手拖动演示，用语音讲解。遇到常见疑问，它会在右栏公开向 AI 助教提问，并用另一个声音读出助教的回答。
+AI 讲师会打开一个 Chrome 窗口，带你走读课程：滚动到正在讲的段落并高亮，亲手拖动演示，用语音讲解。遇到常见疑问，它会在右栏公开向 AI 助教提问，并用另一个声音读出助教的回答。9 课都有讲稿。
 
-```bash
-just super-agent-course   # 终端 1：启动课程服务
-just lecture-audio SA02   # 第一次：预合成讲师语音（约 1 分钟，需联网）
-just lecture SA02         # 终端 2：开讲；从某个小节开始：just lecture SA02 --from s4
-```
-
-课程服务换了端口时，讲师要用同一个端口：
+一条命令同时启动课程和讲师：
 
 ```bash
-just super-agent-course 9000
-just lecture SA02 --port 9000
+just super-agent-course --lecture                            # 从第一课 SA01 开始，默认端口 8766
+just super-agent-course --lecture SA02                       # 指定某一课
+just super-agent-course --lecture SA02 --port 9000 --from s4 # 换端口，从第 4 小节开始
 ```
+
+讲完一课会倒数 5 秒，自动进入下一课，一直讲到 SA09；倒数时按空格可以留在本课，再按空格继续。关掉讲课的浏览器窗口，或按 `Ctrl+C`，课程服务也会一起停止。第一次讲某一课时，讲师会边讲边合成语音，开头几步会慢一点；想提前合成好，先运行 `just lecture-audio SA02`（约 1 分钟，需联网）。
+
+也可以分开启动：先 `just super-agent-course --port 9000`，再在另一个终端 `just lecture SA02 --port 9000`。
 
 - 控制：页面左下角有控制条。空格暂停/继续，←/→ 上一步/下一步，`R` 换个讲法，`Esc` 离开输入框。
 - 随时可以在右栏问助教（可以用语音输入工具口述）。讲师会自动暂停，用助教的声音读出回答。朗读时按空格停止朗读；再按空格继续讲课。提问后按 `Esc` 离开输入框，快捷键才会生效。
