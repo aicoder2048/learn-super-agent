@@ -74,6 +74,39 @@ class Stage:
         elif "wait" in action:
             await self.page.wait_for_timeout(int(action["wait"]))
 
+    async def section_text(self, target: str, nth: int) -> str:
+        """目标所在小节的文字，给"换个讲法"做上下文。"""
+        return await self.page.evaluate(
+            "([s, n]) => { const el = document.querySelectorAll(s)[n];"
+            " return el ? (el.closest('section') || el).innerText : ''; }", [target, nth])
+
+    # ---------- 助教（右栏） ----------
+    async def ask_tutor(self, question: str) -> int:
+        """在右栏公开提问。返回提问前已有的助教回答条数，用来认出新回答。"""
+        if not await self.page.evaluate("document.body.classList.contains('tutor-open')"):
+            await self.page.click(".tutor-fab")
+        before = await self.page.locator(".tutor-panel .tp-msg.ai").count()
+        box = self.page.locator(".tutor-panel textarea")
+        await box.fill(question)
+        await box.press("Enter")
+        await box.evaluate("el => el.blur()")  # 交还焦点，让快捷键继续生效
+        return before
+
+    async def tutor_answer(self, before: int) -> tuple[str, bool, str]:
+        """读新回答：（目前的正文，是否已答完，错误信息）。"""
+        return tuple(await self.page.evaluate(
+            """n => {
+              const msgs = document.querySelectorAll('.tutor-panel .tp-msg.ai');
+              const send = document.querySelector('.tutor-panel .tp-send');
+              const busy = send && send.textContent.trim() !== '发送';
+              const m = msgs[n];
+              if (!m) return ['', false, ''];
+              const c = m.cloneNode(true);
+              const err = c.querySelector('.tp-err');
+              c.querySelectorAll('.tp-dots, .tp-caret, .tp-err').forEach(x => x.remove());
+              return [c.innerText, !busy, err ? err.innerText : ''];
+            }""", before))
+
     # ---------- 自测 ----------
     async def quiz_answered(self, target: str, nth: int) -> bool:
         return await self.page.evaluate(

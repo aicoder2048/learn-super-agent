@@ -100,3 +100,77 @@ def test_next_key_skips_current_step(tmp_path):
             await stage.close()
 
     asyncio.run(go())
+
+
+live_llm = pytest.mark.skipif(
+    __import__("os").environ.get("LECTURER_LIVE_LLM") != "1",
+    reason="会真实调用 DeepSeek / Kimi，设 LECTURER_LIVE_LLM=1 才跑")
+
+
+async def _open(script, rewriters=None):
+    from playwright.async_api import async_playwright
+
+    from controls import Controls
+    from player import Lecture
+    from stage import Stage
+
+    pw = await async_playwright().start()
+    controls, holder = Controls(), {}
+    stage = await Stage.open(pw, BASE, script.lesson,
+                             lambda c: asyncio.ensure_future(holder["l"].on_command(c)), headless=True)
+    holder["l"] = Lecture(script, stage, controls, rewriters)
+    return pw, stage, holder["l"]
+
+
+def _script(tmp_path, steps):
+    from script import load_script
+
+    p = tmp_path / "SMOKE.json"
+    p.write_text(json.dumps(dict(SMOKE, steps=steps), ensure_ascii=False), encoding="utf-8")
+    return load_script(p)
+
+
+@live_llm
+def test_proxy_question_is_asked_and_answer_spoken(tmp_path):
+    step = {"id": "s4-01", "section": "s4", "kind": "proxy", "target": "#s4",
+            "say": "我们请助教说说。", "question": "用一句话说：批处理为什么能让 Router 不成为瓶颈？30 字以内。"}
+    script = _script(tmp_path, [step])
+    spoken = []
+
+    async def go():
+        pw, stage, lec = await _open(script)
+        orig = stage.play
+        stage.play = lambda a: (spoken.append(a), orig(a))[1]
+        await asyncio.wait_for(lec.run(0), 120)
+        msgs = await stage.page.locator(".tutor-panel .tp-msg").all_inner_texts()
+        await stage.close()
+        await pw.stop()
+        return msgs
+
+    msgs = asyncio.run(go())
+    assert any("批处理" in m for m in msgs)  # 问题公开出现在右栏
+    assert len(spoken) >= 2  # 讲师引出 + 至少一句助教回答
+
+
+@live_llm
+def test_reexplain_speaks_rewritten_text(tmp_path):
+    from llm import load_env
+    from player import build_rewriters
+
+    script = _script(tmp_path, [{"id": "s4-01", "section": "s4", "kind": "say", "target": "#s4 h2",
+                                 "say": "积压的 Trigger 会合并进下一次 LLM 调用，所以单个 Router 不是瓶颈。"}])
+    spoken = []
+
+    async def go():
+        pw, stage, lec = await _open(script, build_rewriters(load_env()))
+        orig = stage.play
+        stage.play = lambda a: (spoken.append(a), orig(a))[1]
+        run = asyncio.create_task(lec.run(0))
+        await asyncio.sleep(2)
+        await stage.page.keyboard.press("r")
+        await asyncio.wait_for(run, 120)
+        await stage.close()
+        await pw.stop()
+
+    asyncio.run(go())
+    assert len({a.name for a in spoken}) >= 2  # 原讲解 + 换个讲法的新音频

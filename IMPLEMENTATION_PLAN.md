@@ -24,10 +24,10 @@
 **Goal**: proxy 步骤在右栏公开提问，助教回答时按句流式朗读，用助教的声音。按 `R` 时用 Kimi 改写当前这一步并朗读；没有 Kimi key 时改用 DeepSeek。缺 DeepSeek key 时启动报错。
 **Success Criteria**: 代问的问答能在页面上看到，也能听到朗读；换个讲法能在 15 秒内开始说话。
 **Tests**: 选模型的逻辑（Kimi 优先、DeepSeek 兜底）；增量分句（流式文本只吐出新完整的句子）。
-**Status**: In Progress
+**Status**: Complete
 
 ## Stage 5: SA02 讲稿与端到端验收
 **Goal**: 按 `AUTHORING.md` 写好 `scripts/SA02.json`，预合成音频，完整跑一遍。
 **Success Criteria**: 一课完整讲完：2–4 个重点话题、1–2 次代问、两个演示都有操作、4 道自测题。
 **Tests**: 讲稿通过校验；端到端跑通。
-**Status**: Not Started
+**Status**: In Progress
