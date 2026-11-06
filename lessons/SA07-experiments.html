@@ -231,7 +231,7 @@
     <tr><td>完成时间</td><td>Super-agent p50/p95 = 12.4/15.7 分钟；单 Session 中性提示 20.4/29.5；优先委派 13.8/29.0</td></tr>
     <tr><td>根因</td><td>单 Session 分不分工靠提示词和临场判断；双层架构在系统层面保证</td></tr>
     <tr><td>代价</td><td>Super-agent 读缓存 token 更多（2323 万 vs 605 万 / 1082 万）：用 token 换时间和稳定</td></tr>
-    <tr><td>直通</td><td>不改变速度；Router 决定 −约 30%，token −约 37%（2323 万 vs 3177 万）</td></tr>
+    <tr><td>去掉直通</td><td>速度不变；Router 决定 +约 30%，token +约 37%（2323 万 → 3177 万）</td></tr>
     <tr><td>批处理</td><td>1→40 条/分：batch 1.0→2.8，单次 2.5→3.9 秒，分摊 6.4→1.6 秒；目前无需切分 Router</td></tr>
     <tr><td>限定</td><td>合成负载、简化环境，仅作初步参考</td></tr>
   </table></div>
