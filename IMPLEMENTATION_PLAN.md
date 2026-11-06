@@ -18,13 +18,13 @@
 **Goal**: 用 Playwright 打开有界面的 Chrome，注入控制条和高亮样式，按讲稿执行 say、demo、quiz 三类步骤。支持空格、←/→、Esc 快捷键，以及 `--from`。
 **Success Criteria**: SA02 能从头讲到尾。暂停和继续都能立刻生效，上一步/下一步正常。焦点在输入框时快捷键不生效。
 **Tests**: 控制状态机的单元测试（暂停、继续、跳步）；用一份冒烟讲稿做端到端测试。
-**Status**: In Progress
+**Status**: Complete
 
 ## Stage 4: 代问与换个讲法
 **Goal**: proxy 步骤在右栏公开提问，助教回答时按句流式朗读，用助教的声音。按 `R` 时用 Kimi 改写当前这一步并朗读；没有 Kimi key 时改用 DeepSeek。缺 DeepSeek key 时启动报错。
 **Success Criteria**: 代问的问答能在页面上看到，也能听到朗读；换个讲法能在 15 秒内开始说话。
 **Tests**: 选模型的逻辑（Kimi 优先、DeepSeek 兜底）；增量分句（流式文本只吐出新完整的句子）。
-**Status**: Not Started
+**Status**: In Progress
 
 ## Stage 5: SA02 讲稿与端到端验收
 **Goal**: 按 `AUTHORING.md` 写好 `scripts/SA02.json`，预合成音频，完整跑一遍。
