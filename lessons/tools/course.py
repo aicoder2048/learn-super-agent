@@ -1,0 +1,82 @@
+"""启动课程服务，可选同时让 AI 讲师开讲（只用标准库；讲师在它自己的 uv 环境里运行）。
+
+    python tools/course.py [PORT] [--port PORT] [--lecture SA02 [--from s3]]
+
+只开课程时，Ctrl+C 停止。带 --lecture 时，关掉讲课的浏览器窗口或按 Ctrl+C，课程服务也一起停止。
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+LESSONS = Path(__file__).resolve().parent.parent
+DEFAULT_PORT = 8766
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    ap = argparse.ArgumentParser(prog="just super-agent-course", description="启动 Super-agent 课程，可选 AI 讲师")
+    ap.add_argument("pos_port", nargs="?", type=int, metavar="PORT", help="端口（旧写法，等同 --port）")
+    ap.add_argument("--port", type=int, default=None, help=f"课程服务端口（默认 {DEFAULT_PORT}）")
+    ap.add_argument("--lecture", metavar="LESSON", help="同时让 AI 讲师开讲这一课，如 SA02")
+    ap.add_argument("--from", dest="start", metavar="SECTION", help="讲师从哪个小节开始，如 s3（需配合 --lecture）")
+    a = ap.parse_args(argv)
+    if a.pos_port and a.port and a.pos_port != a.port:
+        ap.error(f"端口写了两个不同的值：{a.pos_port} 和 {a.port}")
+    a.port = a.port or a.pos_port or DEFAULT_PORT
+    if not 1 <= a.port <= 65535:
+        ap.error(f"端口号不合法：{a.port}")
+    if a.start and not a.lecture:
+        ap.error("--from 只能和 --lecture 一起用")
+    if a.lecture:
+        a.lecture = a.lecture.upper()
+    return a
+
+
+def wait_ready(port: int, server: subprocess.Popen, timeout: float = 15) -> None:
+    url = f"http://127.0.0.1:{port}/lessons/"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if server.poll() is not None:
+            raise SystemExit(f"课程服务没能启动（退出码 {server.returncode}）。端口 {port} 可能被占用了。")
+        try:
+            urllib.request.urlopen(url, timeout=1).close()
+            return
+        except OSError:
+            time.sleep(0.3)
+    raise SystemExit(f"等了 {timeout:.0f} 秒，课程服务还没就绪：{url}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    a = parse_args(sys.argv[1:] if argv is None else argv)
+    server = subprocess.Popen([sys.executable, str(LESSONS / "tools" / "serve.py"), "--port", str(a.port)])
+    lecture = None
+    try:
+        if not a.lecture:
+            return server.wait()
+        wait_ready(a.port, server)
+        cmd = ["uv", "run", "lecturer.py", "run", a.lecture, "--port", str(a.port)]
+        if a.start:
+            cmd += ["--from", a.start]
+        lecture = subprocess.Popen(cmd, cwd=LESSONS / "lecturer")
+        return lecture.wait()  # 讲课结束（浏览器关掉）就收工
+    except KeyboardInterrupt:  # Ctrl+C 也发给了子进程，它们会自己干净退出
+        return 0
+    finally:
+        for p in (lecture, server):
+            if p and p.poll() is None:
+                p.terminate()
+        for p in (lecture, server):
+            if p:
+                try:
+                    p.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -3,10 +3,10 @@
 default:
     @just --list
 
-# Start the Super-agent course with its AI tutor: http://127.0.0.1:<port>/lessons/
+# 启动课程（含 AI 助教）；加 --lecture SA02 同时让 AI 讲师开讲。如：just super-agent-course --lecture SA02 --port 9999
 [continue]
-super-agent-course port="8766":
-    cd lessons && uv run --no-project python tools/serve.py --port {{port}}
+super-agent-course *args:
+    cd lessons && uv run --no-project python tools/course.py {{args}}
 
 # 预合成一课的 AI 讲师音频，如：just lecture-audio SA02
 lecture-audio lesson:
