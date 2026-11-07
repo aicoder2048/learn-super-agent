@@ -17,7 +17,7 @@ def server_up() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not server_up(), reason="课程服务未启动（just super-agent-course）")
+pytestmark = pytest.mark.skipif(not server_up(), reason="课程服务未启动（just course）")
 
 SMOKE = {
     "lesson": "SA02-two-layer.html",

@@ -13,7 +13,7 @@
 | 怎么用 | 你自己读课，随时选中段落或点图片/演示上的“问 AI” | 坐着听；随时可暂停、跳步、插话问助教 |
 | 能否单独用 | **可以**，只开课程就有，不需要讲师 | 依赖 AI 助教（讲师会公开向助教提问） |
 | 需要 | `DEEPSEEK_API_KEY` | `DEEPSEEK_API_KEY` + Chrome；建议先预合成音频 |
-| 启动 | `just super-agent-course` | `just super-agent-course --lecture` |
+| 启动 | `just course` | `just course --lecture` |
 
 两者都不要也行：直接双击 `lessons/index.html` 就能当静态课程读。
 
@@ -89,9 +89,9 @@ cd lessons/lecturer && uv run lecturer.py audio [SA02]
 ### 5. 启动
 
 ```bash
-just super-agent-course                     # 只开课程（含 AI 助教）
-just super-agent-course --lecture           # 同时让 AI 讲师从 SA01 开讲
-just super-agent-course --lecture SA02 --from s4 --port 9000   # 指定课、小节、端口
+just course                                        # 只开课程（含 AI 助教）
+just course --lecture                              # 同时让 AI 讲师从 SA01 开讲
+just course --lecture SA02 --from s4 --port 9000   # 指定课、小节、端口
 ```
 
 不用 just（在项目根目录）：
