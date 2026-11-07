@@ -40,6 +40,10 @@
   aside.addEventListener("ended", finishAside);
   aside.addEventListener("error", finishAside);
 
+  // play() 刚开始加载就被 pause() 打断时，浏览器以 AbortError 拒绝它——那不是“播完了”，
+  // 等 resume 再接着播；别的错误（文件坏了、不让自动播放）才当作这段结束，免得讲课卡住。
+  const endUnlessPaused = (end) => (e) => { if (!e || e.name !== "AbortError") end(); };
+
   function send(cmd) { if (window.__lecturerCmd) window.__lecturerCmd(cmd); }
 
   function mount() {
@@ -129,22 +133,22 @@
       return new Promise((resolve) => {
         ended = resolve;
         audio.src = url;
-        audio.play().catch(() => finish());
+        audio.play().catch(endUnlessPaused(finish));
       });
     },
     pause() { audio.pause(); },
-    resume() { if (ended) audio.play().catch(() => finish()); },
+    resume() { if (ended) audio.play().catch(endUnlessPaused(finish)); },
     stop() { audio.pause(); finish(); },
     playAside(url) {
       finishAside();
       return new Promise((resolve) => {
         asideEnded = resolve;
         aside.src = url;
-        aside.play().catch(() => finishAside());
+        aside.play().catch(endUnlessPaused(finishAside));
       });
     },
     pauseAside() { aside.pause(); },
-    resumeAside() { if (asideEnded) aside.play().catch(() => finishAside()); },
+    resumeAside() { if (asideEnded) aside.play().catch(endUnlessPaused(finishAside)); },
     stopAside() { aside.pause(); finishAside(); },
     highlight(sel, nth) {
       document.querySelectorAll(".lecturer-focus").forEach((x) => x.classList.remove("lecturer-focus"));

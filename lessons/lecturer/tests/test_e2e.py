@@ -243,3 +243,33 @@ def test_moves_on_to_next_lesson(tmp_path, monkeypatch):
     lessons = [("SA02", tiny("A", "SA02-two-layer.html", "s1")), ("SA03", tiny("B", "SA03-event-filter-route.html", "s1"))]
     asyncio.run(asyncio.wait_for(player.run_lecture(lessons, BASE, headless=True), 60))
     assert visited == ["SA02-two-layer.html", "SA03-event-filter-route.html"]  # 打开第一课也走 goto
+
+
+def test_pause_right_after_play_does_not_count_as_finished():
+    """play() 刚开始加载就 pause()，浏览器以 AbortError 拒绝 play()：不能当成这段播完了（讲师会跳过这句）。"""
+    from playwright.async_api import async_playwright
+
+    from stage import Stage
+    from tts import LECTURER_VOICE, synthesize
+
+    async def go():
+        async with async_playwright() as pw:
+            stage = await Stage.open(pw, BASE, "SA02-two-layer.html", lambda c: None, headless=True)
+            url = f"{stage.base}lecturer/audio/{(await synthesize('暂停测试。', LECTURER_VOICE)).name}"
+            out = {}
+            for fn, pause, resume in (("play", "pause", "resume"), ("playAside", "pauseAside", "resumeAside")):
+                out[fn] = await stage.page.evaluate("""([u, fn, pause, resume]) => new Promise((ok) => {
+                    let done = false;
+                    __lecturer[fn](u).then(() => { done = true; });
+                    __lecturer[pause]();
+                    setTimeout(() => {
+                      const early = done;
+                      __lecturer[resume]();
+                      setTimeout(() => ok([early, done]), 4000);
+                    }, 1000);
+                })""", [url, fn, pause, resume])
+            await stage.close()
+            return out
+
+    out = asyncio.run(go())
+    assert out == {"play": [False, True], "playAside": [False, True]}  # 暂停时没算播完；继续后播完
