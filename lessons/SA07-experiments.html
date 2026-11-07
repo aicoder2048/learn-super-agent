@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>读懂实验：消融与批处理 · SA07</title>
-<link rel="stylesheet" href="assets/sa-lesson.css">
+<link rel="stylesheet" href="assets/course.css">
+<link rel="stylesheet" href="assets/course-theme.css">
 <script src="assets/glossary-data.js"></script>
-<script src="assets/sa-lib.js"></script>
+<script src="assets/course-config.js"></script>
+<script src="assets/course-lib.js"></script>
 <style>
   .btn.on { background: var(--brand); color: var(--surface); border-color: var(--brand); }
   .bars { display: grid; gap: 10px; margin: 10px 0; }
@@ -24,7 +26,7 @@
 </style>
 </head>
 <body>
-<header id="sa-topbar"></header>
+<header id="cl-topbar"></header>
 
 <div class="layout">
 <aside class="toc">
@@ -244,36 +246,36 @@
   </div>
 </section>
 
-<nav id="sa-pager" data-current="SA07-experiments.html"></nav>
+<nav id="cl-pager" data-current="SA07-experiments.html"></nav>
 <p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§7（2026-10-31）。实验数字全部来自原文；图 14 的中间点为目测近似值。标为“补充”的内容是课程作者的解释，不是原文观点。</p>
 </main>
 </div>
 
 <script>
-SA.onReady(function () {
+CL.onReady(function () {
   /* ---- 1. 四种方案 ---- */
   const S = [
-    { name: "Super-agent", color: SA.C.blue, p50: 12.4, p95: 15.7, tok: 2323 },
-    { name: "Super-agent，去掉直通", color: SA.C.teal, p50: 12.6, p95: 15.5, tok: 3177 },
-    { name: "单 Session + Subagent，中性提示", color: SA.C.red, p50: 20.4, p95: 29.5, tok: 605 },
-    { name: "单 Session + Subagent，提示优先委派", color: SA.C.purple, p50: 13.8, p95: 29.0, tok: 1082 },
+    { name: "Super-agent", color: CL.C.blue, p50: 12.4, p95: 15.7, tok: 2323 },
+    { name: "Super-agent，去掉直通", color: CL.C.teal, p50: 12.6, p95: 15.5, tok: 3177 },
+    { name: "单 Session + Subagent，中性提示", color: CL.C.red, p50: 20.4, p95: 29.5, tok: 605 },
+    { name: "单 Session + Subagent，提示优先委派", color: CL.C.purple, p50: 13.8, p95: 29.0, tok: 1082 },
   ];
   const LABEL = { p50: ["p50 完成时间", " 分钟", 1], p95: ["p95 完成时间", " 分钟", 1], tok: ["单次实验读缓存 token", " 万", 0] };
   let metric = "p50";
   function draw1() {
-    SA.$$("#demo1 [data-m]").forEach((b) => b.classList.toggle("on", b.dataset.m === metric));
+    CL.$$("#demo1 [data-m]").forEach((b) => b.classList.toggle("on", b.dataset.m === metric));
     const [lab, unit, d] = LABEL[metric], max = (metric === "tok" ? Math.max(...S.map((s) => s.tok)) : Math.max(...S.map((s) => s.p95))) * 1.22;
-    SA.$("#d1-bars").innerHTML = S.map((s) => {
+    CL.$("#d1-bars").innerHTML = S.map((s) => {
       const w = (100 * s[metric]) / max;
       const ghost = metric !== "tok" ? '<div class="fill ghost" style="width:' + (100 * s.p95) / max + "%;background:" + s.color + '"></div>' : "";
       const main = metric === "p95" ? "" : '<div class="fill" style="width:' + w + "%;background:" + s.color + '"></div>';
       const p95fill = metric === "p95" ? '<div class="fill" style="width:' + w + "%;background:" + s.color + '"></div>' : "";
       return '<div class="bar-row"><div class="nm"><span class="sw" style="background:' + s.color + '"></span>' + s.name + '</div><div class="track">' +
-        (metric === "p50" ? ghost : "") + main + p95fill + '<span class="val" style="left:calc(' + w + '% + 6px)">' + SA.fmt(s[metric], d) + unit + "</span></div></div>";
+        (metric === "p50" ? ghost : "") + main + p95fill + '<span class="val" style="left:calc(' + w + '% + 6px)">' + CL.fmt(s[metric], d) + unit + "</span></div></div>";
     }).join("") + (metric === "p50" ? '<p class="data-note" style="margin:2px 0 0">浅色部分延伸到 p95，长度差就是“慢的那一头”比典型情况多出的时间。</p>' : "");
     const base = S[0];
-    SA.$("#d1-out").textContent = lab + "（原文图 13）：\n" + S.map((s) => "· " + s.name + "：" + SA.fmt(s[metric], d) + unit +
-      (s === base ? "" : "（相对 Super-agent " + (s[metric] >= base[metric] ? "+" : "") + SA.fmt((100 * (s[metric] - base[metric])) / base[metric], 0) + "%）")).join("\n") +
+    CL.$("#d1-out").textContent = lab + "（原文图 13）：\n" + S.map((s) => "· " + s.name + "：" + CL.fmt(s[metric], d) + unit +
+      (s === base ? "" : "（相对 Super-agent " + (s[metric] >= base[metric] ? "+" : "") + CL.fmt((100 * (s[metric] - base[metric])) / base[metric], 0) + "%）")).join("\n") +
       "\n小结：Super-agent 两种方案 p95 都在 16 分钟以内；单 Session 两种方案 p95 都约 29–30 分钟，但 token 只有 Super-agent 的 26%–47%。";
   }
   function scatter() {
@@ -287,9 +289,9 @@ SA.onReady(function () {
     S.forEach((s, k) => {
       g += '<circle cx="' + xs(s.tok) + '" cy="' + ys(s.p95) + '" r="8" fill="' + s.color + '"/><text x="' + (xs(s.tok) + off[k][0]) + '" y="' + (ys(s.p95) + off[k][1]) + '" text-anchor="' + off[k][2] + '">' + s.name + "</text>";
     });
-    SA.$("#d1-scatter").innerHTML = g + "</svg>";
+    CL.$("#d1-scatter").innerHTML = g + "</svg>";
   }
-  SA.$$("#demo1 [data-m]").forEach((b) => b.addEventListener("click", () => { metric = b.dataset.m; draw1(); }));
+  CL.$$("#demo1 [data-m]").forEach((b) => b.addEventListener("click", () => { metric = b.dataset.m; draw1(); }));
   draw1(); scatter();
 
   /* ---- 2. 批处理曲线（原文图 14 目测近似值） ---- */
@@ -310,31 +312,31 @@ SA.onReady(function () {
     g += '<text class="sm" x="' + (W / 2) + '" y="' + (Hh - 2) + '" text-anchor="middle">需要决定的 Trigger 到达速率（条/分）</text>';
     const line = (k, y, color, dash) => '<polyline fill="none" stroke="' + color + '" stroke-width="2.4"' + (dash ? ' stroke-dasharray="6 4"' : "") + ' points="' + P.map((p) => xs(p[0]) + "," + y(p[k])).join(" ") + '"/>' +
       P.map((p) => '<circle cx="' + xs(p[0]) + '" cy="' + y(p[k]) + '" r="3.5" fill="' + color + '"/>').join("");
-    g += line(3, yL, SA.C.blue) + line(2, yL, SA.C.orange, true) + line(1, yR, SA.C.teal);
-    g += '<line x1="' + xs(r) + '" y1="' + T + '" x2="' + xs(r) + '" y2="' + (Hh - B) + '" stroke="' + SA.C.red + '" stroke-width="1.5"/>';
+    g += line(3, yL, CL.C.blue) + line(2, yL, CL.C.orange, true) + line(1, yR, CL.C.teal);
+    g += '<line x1="' + xs(r) + '" y1="' + T + '" x2="' + xs(r) + '" y2="' + (Hh - B) + '" stroke="' + CL.C.red + '" stroke-width="1.5"/>';
     const lx = L;
-    g += '<text x="' + lx + '" y="' + (14) + '" style="fill:' + SA.C.blue + '">— 每个决定分摊（秒，左轴）</text>';
-    g += '<text x="' + (lx + 260) + '" y="' + (14) + '" style="fill:' + SA.C.orange + '">- - 单次请求耗时（秒，左轴）</text>';
-    g += '<text x="' + lx + '" y="' + (34) + '" style="fill:' + SA.C.teal + '">— 平均 batch 大小（右轴）</text>';
+    g += '<text x="' + lx + '" y="' + (14) + '" style="fill:' + CL.C.blue + '">— 每个决定分摊（秒，左轴）</text>';
+    g += '<text x="' + (lx + 260) + '" y="' + (14) + '" style="fill:' + CL.C.orange + '">- - 单次请求耗时（秒，左轴）</text>';
+    g += '<text x="' + lx + '" y="' + (34) + '" style="fill:' + CL.C.teal + '">— 平均 batch 大小（右轴）</text>';
     return g + "</svg>";
   }
   function draw2() {
-    const r = +SA.$("#d2-r").value, b = interp(r, 1), t = interp(r, 2), a = interp(r, 3);
-    SA.$("#d2-rv").textContent = r;
-    SA.$("#d2-b").textContent = SA.fmt(b, 2) + " 条";
-    SA.$("#d2-t").textContent = SA.fmt(t, 1) + " 秒";
-    SA.$("#d2-a").textContent = SA.fmt(a, 2) + " 秒";
-    SA.$("#d2-chart").innerHTML = chart(r);
+    const r = +CL.$("#d2-r").value, b = interp(r, 1), t = interp(r, 2), a = interp(r, 3);
+    CL.$("#d2-rv").textContent = r;
+    CL.$("#d2-b").textContent = CL.fmt(b, 2) + " 条";
+    CL.$("#d2-t").textContent = CL.fmt(t, 1) + " 秒";
+    CL.$("#d2-a").textContent = CL.fmt(a, 2) + " 秒";
+    CL.$("#d2-chart").innerHTML = chart(r);
     const cap = 60 / a;
-    SA.$("#d2-out").textContent =
-      "到达速率 " + r + " 条/分（插值，近似值）：batch " + SA.fmt(b, 2) + "，单次请求 " + SA.fmt(t, 1) + " 秒，每个决定分摊 " + SA.fmt(a, 2) + " 秒\n" +
-      "相对最低负载：batch ×" + SA.fmt(b / P[0][1], 2) + "，单次请求 ×" + SA.fmt(t / P[0][2], 2) + "，分摊时间 ×" + SA.fmt(a / P[0][3], 2) + "\n" +
-      "补充推算（原文没有给出）：按分摊时间折算，Router 每分钟约能做 " + SA.fmt(cap, 1) + " 个决定；若不批处理（一直按最低负载的 " + SA.fmt(P[0][3], 2) + " 秒/个），每分钟只能做约 " + SA.fmt(60 / P[0][3], 1) + " 个。" +
+    CL.$("#d2-out").textContent =
+      "到达速率 " + r + " 条/分（插值，近似值）：batch " + CL.fmt(b, 2) + "，单次请求 " + CL.fmt(t, 1) + " 秒，每个决定分摊 " + CL.fmt(a, 2) + " 秒\n" +
+      "相对最低负载：batch ×" + CL.fmt(b / P[0][1], 2) + "，单次请求 ×" + CL.fmt(t / P[0][2], 2) + "，分摊时间 ×" + CL.fmt(a / P[0][3], 2) + "\n" +
+      "补充推算（原文没有给出）：按分摊时间折算，Router 每分钟约能做 " + CL.fmt(cap, 1) + " 个决定；若不批处理（一直按最低负载的 " + CL.fmt(P[0][3], 2) + " 秒/个），每分钟只能做约 " + CL.fmt(60 / P[0][3], 1) + " 个。" +
       (r <= 60 / P[0][3] ? "\n→ 当前到达速率低于“不批处理”的处理能力：不批处理也跟得上。"
-        : cap >= r ? "\n→ 到达速率超过了“不批处理”的处理能力。批处理把容量提到约 " + SA.fmt(cap, 1) + " 个/分，高于到达速率，Router 跟得上。"
-        : "\n→ 批处理把容量提到约 " + SA.fmt(cap, 1) + " 个/分，接近到达速率 " + r + " 条/分，已到测量范围的边缘。补充推测：积压变多时 batch 会继续变大，容量可能再升；但原文没有测更高的速率。原文只说实验中“仍未触及单 Router 的吞吐瓶颈”。");
+        : cap >= r ? "\n→ 到达速率超过了“不批处理”的处理能力。批处理把容量提到约 " + CL.fmt(cap, 1) + " 个/分，高于到达速率，Router 跟得上。"
+        : "\n→ 批处理把容量提到约 " + CL.fmt(cap, 1) + " 个/分，接近到达速率 " + r + " 条/分，已到测量范围的边缘。补充推测：积压变多时 batch 会继续变大，容量可能再升；但原文没有测更高的速率。原文只说实验中“仍未触及单 Router 的吞吐瓶颈”。");
   }
-  SA.$("#d2-r").addEventListener("input", draw2);
+  CL.$("#d2-r").addEventListener("input", draw2);
   draw2();
 });
 </script>

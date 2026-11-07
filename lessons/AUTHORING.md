@@ -11,14 +11,16 @@
 
 | 路径 | 用途 |
 |---|---|
-| `SAxx-*.html` | 课程页。文件名必须和 `assets/sa-lib.js` 里 `SA.LESSONS` 的 `file` 一致 |
-| `assets/sa-lesson.css` | 公用样式。需要时在课程 `<style>` 里写少量局部样式，只用 CSS 变量，不写死颜色 |
-| `assets/sa-lib.js` | 公用脚本：顶栏、左栏、翻页、测验、术语提示、原图放大、`SA.lanes` 时间线、`SA.rng` |
-| `assets/sa-tutor.js` | AI 助教前端（由 sa-lib 自动加载） |
+| `SAxx-*.html` | 课程页。文件名必须和 `assets/course-config.js` 里 `CL.LESSONS` 的 `file` 一致 |
+| `assets/course-config.js` | **课程配置**：`CL.CONFIG`（前缀 `sa`、标题、端口）、`CL.STEPS`、`CL.LESSONS`、可选的 `CL.TUTOR_*` 快捷问题。课程自己的公用函数也挂在这里 |
+| `assets/course-theme.css` | 课程自己的公用样式（目前为空）。只用 CSS 变量，不写死颜色；单课样式写在那一课的 `<style>` 里 |
+| `assets/course-lib.js` / `course-tutor.js` / `course.css` | **框架文件，不要改**：顶栏、左栏、翻页、测验、术语提示、原图放大、`CL.lanes`、AI 助教（可拖宽、记笔记）。从 interactive-courseware 模板同步（见第 9 节） |
 | `assets/glossary-data.js` | 共用术语表 |
 | `assets/glossary-add-<课号>.js` | 写课时新增术语的临时文件（见第 5 节），最后由总编合并 |
 | `img/figNN.*` | 原文配图（图 1–14，编号与原文顺序一致） |
-| `tools/serve.py` | 本地服务 + DeepSeek 转发（AI 助教） |
+| `tools/serve.py` | 本地服务 + DeepSeek 转发（AI 助教、记笔记）、来源漂移检查。框架文件 |
+| `tools/sources.json` | 来源清单：助教人设与规则、每课附带哪些资料（原文全课都带；原型文档按课挑选）、来源快照 |
+| `notes.html` | 学习笔记页：列出助教整理出的笔记（存在 `study-notes/`，不进 git） |
 | `tools/check_page.py` | 用真 Chrome 打开页面，报 JS 错误、坏链接、缺术语、横向滚动 |
 | `../docs/articles/super-agent-design-exploration.md` | **原文**（唯一事实来源） |
 | `../docs/articles/prototype-docs/` | 开源原型的设计文档（README、000–008） |
@@ -45,8 +47,8 @@
 ## 2. 页面骨架（照抄 SA01）
 
 ```html
-<head>  sa-lesson.css → glossary-data.js → [glossary-add-X.js] → sa-lib.js
-<header id="sa-topbar"></header>
+<head>  course.css → course-theme.css → glossary-data.js → [glossary-add-X.js] → course-config.js → course-lib.js
+<header id="cl-topbar"></header>
 <div class="layout">
   <aside class="toc"> 本课目录 <ol><li><a href="#s1">…</a></li>… </ol></aside>
   <main>
@@ -54,11 +56,11 @@
     .objectives（学完本课，你能够：3–5 条，动词开头）
     section.lesson-sec#s1 … #sN   每节 h2 带 <span class="num">01</span>
     最后一节：自测（3–5 道 .quiz）+ 速记表 + 相关课程 .related
-    <nav id="sa-pager" data-current="本文件名.html"></nav>
+    <nav id="cl-pager" data-current="本文件名.html"></nav>
     <p class="disclaimer">原文出处 + “补充内容是课程作者的解释”</p>
   </main>
 </div>
-<script> SA.onReady(function(){ … }) </script>
+<script> CL.onReady(function(){ … }) </script>
 ```
 
 ## 3. 组件速查
@@ -69,22 +71,22 @@
 - `.grid-2 / .grid-3` 里放 `.kp` 卡片；`.vs` 方案对照卡（`.good` / `.bad`）。
 - `ol.steps`；`ul.checklist`；`.tbl-wrap > table.tbl`；`.pill.fast/.slow/.hot` 小徽章；`.src-ref` 原文位置标签（如 `<span class="src-ref">§3.2</span>`）。
 - 互动演示：`.chart-card` > `.chart-head`（`.chart-title` + 控件 `label.ctrl` / `.btn`）→ `.demo#id`（演示区）→ `.readout`（等宽结果）→ `.chart-foot`（一两句“看什么”）。**结论数字要写进 `.readout` 或 `.chart-foot`**，AI 助教才能读到。
-- 时间线：`SA.lanes("#el", [{name, segs:[{t0,t1,cls:"c1".."c6",text}], ticks:[t]}], {t1, unit:"s"})`。
+- 时间线：`CL.lanes("#el", [{name, segs:[{t0,t1,cls:"c1".."c6",text}], ticks:[t]}], {t1, unit:"s"})`。
 - 消息流：`ul.msgs > li.(drop|fast|slow|act)`，内含 `.src`、正文、`.verdict`。
 - 内联 SVG 图示：`<div class="diagram"><svg viewBox=…>`，用类 `.box .box.hl .box.dim .edge .edge.hl .edge.dash`、`text.sm`，自动适配三种主题；下面可加 `.cap`。不要写死颜色。注意：共享样式 `:is(.diagram, .demo) svg text { fill }` 会覆盖 SVG 的 `fill="…"` 属性；确需特殊颜色时用内联 `style="fill:…"`。
 - `.quiz[data-answer=正确选项下标从0起]` > `.q` + `.opts > button…` + `.explain`。
 - 术语：`<a class="term" href="glossary.html#router">Router 层</a>`。ID 必须存在。
 - 课程互链：`<a href="SA03-event-filter-route.html#s3">…</a>`。
 
-## 4. sa-lib.js 速查
+## 4. course-lib.js 速查
 
 ```js
-SA.$("#id")  SA.$$(".x")  SA.fmt(x, 1)  SA.esc(s)  SA.pctl(arr, 95)
-const r = SA.rng(42); r()            // 可复现的随机数，演示用
-SA.lanes(el, lanes, opts)            // 时间线泳道
-SA.C.blue / orange / teal / purple / red / gray / gold / pink
-SA.onTheme(fn)                       // 主题切换回调（JS 里用了颜色时重画）
-SA.cssVar("--ink")                   // 读 CSS 变量
+CL.$("#id")  CL.$$(".x")  CL.fmt(x, 1)  CL.esc(s)  CL.pctl(arr, 95)
+const r = CL.rng(42); r()            // 可复现的随机数，演示用
+CL.lanes(el, lanes, opts)            // 时间线泳道
+CL.C.blue / orange / teal / purple / red / gray / gold / pink
+CL.onTheme(fn)                       // 主题切换回调（JS 里用了颜色时重画）
+CL.cssVar("--ink")                   // 读 CSS 变量
 ```
 
 ## 5. 术语表
@@ -92,11 +94,11 @@ SA.cssVar("--ink")                   // 读 CSS 变量
 - 先查 `assets/glossary-data.js`，有就直接用那个 ID。
 - 没有、又是读者需要的概念：在你自己的 `assets/glossary-add-<课号>.js` 里新增（并在课程 `<head>` 里引入它）：
   ```js
-  Object.assign(window.SA_GLOSSARY, {
+  Object.assign(window.CL_GLOSSARY, {
     "id-kebab": { term: "中文名", en: "English", cat: "分类", short: "一句话定义", body: "<p>详细解释</p>", see: ["相关id"] },
   });
   ```
-  分类只用：基础概念 / 架构 / 事件驱动 / 上下文 / 交互 / 运行与可靠性 / 安全与边界 / 原型实现 / 系统设计经典。
+  分类只用 `glossary-data.js` 里 `CL_GLOSSARY_CATS` 列出的：基础概念 / 架构 / 事件驱动 / 上下文 / 交互 / 运行与可靠性 / 安全与边界 / 原型实现 / 系统设计经典。
 - 不要修改 `glossary-data.js` 本身。
 
 ## 6. 写作规范（ASD-STE100 风格的简明中文）
@@ -116,7 +118,7 @@ SA.cssVar("--ink")                   // 读 CSS 变量
 - 每课至少 2 个互动演示（模拟器、可切换的图示、可点的流程）。演示要**揭示原文的一个机制或权衡**，不是装饰。
 - 演示是简化模型。在 `.chart-foot` 里写清楚：模型假设了什么、和原文实验的关系。不要把模拟结果说成原文结论。
 - 演示的数字由页面 JS 现算，正文引用演示结果时写“在这个模拟里”。
-- 用 `SA.rng(seed)` 保证每次结果一样。
+- 用 `CL.rng(seed)` 保证每次结果一样。
 
 ## 8. 自检（交付前必须做）
 
@@ -128,3 +130,10 @@ uv run --no-project --with playwright python tools/check_page.py 你的文件.ht
 ```
 - 只允许出现“链接到还没写好的其他课程”这类 broken link；其他错误必须修好。
 - 打开截图看一遍：演示有内容、文字没溢出、三个主题都可读。
+
+## 9. 来源与框架升级
+
+- **来源变了**：原文重新下载、或原型文档更新后，页面顶部会出现漂移提示。`uv run --no-project python tools/serve.py --check` 列出每课附带的资料、课文里没登记的引用和来源漂移。按变化改好课文后，`--snapshot` 记下新指纹。
+- **助教发现的疑似勘误**：记在 `errata.md`（不进 git）。核实后改课文，再删掉对应条目。
+- **升级框架**：`python3 ~/.claude/skills/interactive-courseware/scripts/sync_course.py lessons`（在项目根目录运行；`--check` 只报告差异）。它覆盖框架文件、服务端和讲师代码，不动 `course-config.js`、`course-theme.css`、`sources.json`、课程页、术语表和讲稿。
+- 单元测试：`uv run --no-project python -m unittest discover -s tools -p "test_*.py"`。

@@ -1,0 +1,184 @@
+{
+  "course": {
+    "title": "Super-agent 设计课",
+    "prefix": "sa",
+    "port": 8766,
+    "persona": "课程讲解 DeepSeek Harness 团队 2026-10-31 发表的文章《Super-agent 设计探索：迈向更自主的 Agent 系统》，以及它的开源研究原型 dsh-superagent-prototype。你像一位耐心、资深的系统架构师，坐在学员旁边一起读文章、看图，帮学员弄懂每个模块解决什么问题、为什么这样设计、代价是什么、什么时候不适用。",
+    "rules": [
+      "沿用原文的术语：Router 层、Worker 层、Trigger、Thread、订阅与直通、Inline & Spill、链式召回、投机执行、异步 ReAct Loop、存算分离、Watchdog。",
+      "讲比喻时可以用生活场景（例如：Router 像餐厅前台，Worker 像后厨的几位厨师）。适合时，把设计对应到经典计算机系统概念（Fast/Slow Path、Cache、局部性、投机执行、存算分离、Control Loop），这正是原文的思路。",
+      "明确区分“原文说的”“原型代码/文档说的”和“我补充的”。原文强调：这是架构思路探讨，不是 DeepSeek Harness 现有产品功能介绍；开源原型 dsh-superagent-prototype 只是验证技术路线的研究原型，与内部版本和文章设计不完全相同。回答时不要夸大。",
+      "原文的实验结果基于合成负载与简化环境，原文说“仅作为初步参考”。讨论数据时保留这个限定。"
+    ]
+  },
+  "sources": [
+    {
+      "id": "article",
+      "label": "原文《Super-agent 设计探索：迈向更自主的 Agent 系统》",
+      "path": "docs/articles/super-agent-design-exploration.md",
+      "scope": "all",
+      "aliases": [
+        "Super-agent 设计探索"
+      ],
+      "snapshot": {
+        "kind": "file",
+        "sha256": "559363663fef7947b0ac901087d51cc5127bcc0f8ec2891d602c77212f573e79"
+      }
+    },
+    {
+      "id": "proto-readme",
+      "label": "原型文档 README.md",
+      "path": "docs/articles/prototype-docs/README.md",
+      "scope": [
+        "SA08-prototype.html",
+        "SA09-open-problems.html"
+      ],
+      "snapshot": {
+        "kind": "git",
+        "commit": "93c4a77"
+      }
+    },
+    {
+      "id": "proto-000-philosophy",
+      "label": "原型文档 000-philosophy.md",
+      "path": "docs/articles/prototype-docs/000-philosophy.md",
+      "scope": [
+        "SA08-prototype.html",
+        "SA09-open-problems.html"
+      ],
+      "aliases": [
+        "000-philosophy"
+      ],
+      "snapshot": {
+        "kind": "git",
+        "commit": "93c4a77"
+      }
+    },
+    {
+      "id": "proto-001-domain",
+      "label": "原型文档 001-domain.md",
+      "path": "docs/articles/prototype-docs/001-domain.md",
+      "scope": [
+        "SA08-prototype.html"
+      ],
+      "aliases": [
+        "001-domain"
+      ],
+      "snapshot": {
+        "kind": "git",
+        "commit": "93c4a77"
+      }
+    },
+    {
+      "id": "proto-002-authorization",
+      "label": "原型文档 002-authorization.md",
+      "path": "docs/articles/prototype-docs/002-authorization.md",
+      "scope": [
+        "SA08-prototype.html",
+        "SA09-open-problems.html"
+      ],
+      "aliases": [
+        "002-authorization"
+      ],
+      "snapshot": {
+        "kind": "git",
+        "commit": "93c4a77"
+      }
+    },
+    {
+      "id": "proto-003-execution",
+      "label": "原型文档 003-execution.md",
+      "path": "docs/articles/prototype-docs/003-execution.md",
+      "scope": [
+        "SA08-prototype.html"
+      ],
+      "aliases": [
+        "003-execution"
+      ],
+      "snapshot": {
+        "kind": "git",
+        "commit": "93c4a77"
+      }
+    },
+    {
+      "id": "proto-004-prompts",
+      "label": "原型文档 004-prompts.md",
+      "path": "docs/articles/prototype-docs/004-prompts.md",
+      "scope": "cited",
+      "aliases": [
+        "004-prompts"
+      ],
+      "snapshot": {
+        "kind": "git",
+        "commit": "93c4a77"
+      }
+    },
+    {
+      "id": "proto-005-panel",
+      "label": "原型文档 005-panel.md",
+      "path": "docs/articles/prototype-docs/005-panel.md",
+      "scope": [
+        "SA08-prototype.html"
+      ],
+      "aliases": [
+        "005-panel"
+      ],
+      "snapshot": {
+        "kind": "git",
+        "commit": "93c4a77"
+      }
+    },
+    {
+      "id": "proto-006-deployment",
+      "label": "原型文档 006-deployment.md",
+      "path": "docs/articles/prototype-docs/006-deployment.md",
+      "scope": "cited",
+      "aliases": [
+        "006-deployment"
+      ],
+      "snapshot": {
+        "kind": "git",
+        "commit": "93c4a77"
+      }
+    },
+    {
+      "id": "proto-007-architecture",
+      "label": "原型文档 007-architecture.md",
+      "path": "docs/articles/prototype-docs/007-architecture.md",
+      "scope": "cited",
+      "aliases": [
+        "007-architecture"
+      ],
+      "snapshot": {
+        "kind": "git",
+        "commit": "93c4a77"
+      }
+    },
+    {
+      "id": "proto-008-cookbook",
+      "label": "原型文档 008-cookbook.md",
+      "path": "docs/articles/prototype-docs/008-cookbook.md",
+      "scope": "cited",
+      "aliases": [
+        "008-cookbook"
+      ],
+      "snapshot": {
+        "kind": "git",
+        "commit": "93c4a77"
+      }
+    },
+    {
+      "id": "proto-setup",
+      "label": "原型文档 SETUP.md",
+      "path": "docs/articles/prototype-docs/SETUP.md",
+      "scope": "cited",
+      "aliases": [
+        "SETUP"
+      ],
+      "snapshot": {
+        "kind": "git",
+        "commit": "93c4a77"
+      }
+    }
+  ]
+}

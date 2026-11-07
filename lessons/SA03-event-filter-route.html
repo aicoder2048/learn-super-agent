@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>事件过滤与路由 · SA03</title>
-<link rel="stylesheet" href="assets/sa-lesson.css">
+<link rel="stylesheet" href="assets/course.css">
+<link rel="stylesheet" href="assets/course-theme.css">
 <script src="assets/glossary-data.js"></script>
-<script src="assets/sa-lib.js"></script>
+<script src="assets/course-config.js"></script>
+<script src="assets/course-lib.js"></script>
 <style>
   .pol { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px 16px; margin-bottom: 12px; font-size: 13.5px; }
   .pol label { display: flex; justify-content: space-between; gap: 8px; align-items: center; color: var(--ink-2); }
@@ -24,7 +26,7 @@
 </style>
 </head>
 <body>
-<header id="sa-topbar"></header>
+<header id="cl-topbar"></header>
 
 <div class="layout">
 <aside class="toc">
@@ -221,13 +223,13 @@
   </div>
 </section>
 
-<nav id="sa-pager" data-current="SA03-event-filter-route.html"></nav>
+<nav id="cl-pager" data-current="SA03-event-filter-route.html"></nav>
 <p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§3、§3.1、§3.2、§7.1（2026-10-31）。标为“补充”的内容和模拟演示是课程作者的解释，不是原文观点。</p>
 </main>
 </div>
 
 <script>
-SA.onReady(function () {
+CL.onReady(function () {
   /* ---- 1. 两级过滤游乐场 ---- */
   const SRC = {
     internal: { name: "内部用户群", def: "candidate" },
@@ -254,7 +256,7 @@ SA.onReady(function () {
     { s: "ci", who: "CI", text: "nightly 构建成功", kind: "noise" },
     { s: "internal", who: "小李", text: "下午 3 点开周会", kind: "noise" },
   ];
-  SA.$("#d1-pol").innerHTML = Object.keys(SRC).map((k) => '<label>' + SRC[k].name + ' <select data-src="' + k + '">' +
+  CL.$("#d1-pol").innerHTML = Object.keys(SRC).map((k) => '<label>' + SRC[k].name + ' <select data-src="' + k + '">' +
     Object.keys(POL).map((p) => '<option value="' + p + '"' + (p === SRC[k].def ? " selected" : "") + ">" + POL[p] + "</option>").join("") + "</select></label>").join("");
   function judge(m, pol, sem) {
     const p = pol[m.s];
@@ -267,21 +269,21 @@ SA.onReady(function () {
     return ["slow", "LLM 判断：不需要行动"];
   }
   function draw1() {
-    const pol = {}; SA.$$("#d1-pol select").forEach((s) => { pol[s.dataset.src] = s.value; });
-    const sem = { fix: SA.$("#d1-fix").checked, ci: SA.$("#d1-ci").checked, rv: SA.$("#d1-rv").checked };
+    const pol = {}; CL.$$("#d1-pol select").forEach((s) => { pol[s.dataset.src] = s.value; });
+    const sem = { fix: CL.$("#d1-fix").checked, ci: CL.$("#d1-ci").checked, rv: CL.$("#d1-rv").checked };
     let drop = 0, llm = 0, act = 0; const rows = [];
     for (const m of MSG) {
       const [cls, v] = judge(m, pol, sem);
       if (cls === "drop") drop++; else llm++; if (cls === "act") act++;
-      rows.push('<li class="' + cls + '"><span class="src">' + SRC[m.s].name + '</span><span><span class="who">' + SA.esc(m.who) + "：</span>" + SA.esc(m.text) + '</span><span class="verdict">' + v + "</span></li>");
+      rows.push('<li class="' + cls + '"><span class="src">' + SRC[m.s].name + '</span><span><span class="who">' + CL.esc(m.who) + "：</span>" + CL.esc(m.text) + '</span><span class="verdict">' + v + "</span></li>");
     }
-    SA.$("#d1-msgs").innerHTML = rows.join("");
-    SA.$("#d1-cnt").innerHTML = "<span>消息 <b>" + MSG.length + "</b></span><span>程序层滤掉 <b>" + drop + "</b></span><span>交给大模型 <b>" + llm + "</b></span><span>最终行动 <b>" + act + "</b></span>";
-    SA.$("#d1-out").textContent = "共 " + MSG.length + " 条消息：程序层滤掉 " + drop + " 条（0 次模型调用），" + llm + " 条进入语义层（" + llm + " 次模型调用），其中 " + act + " 条触发行动。\n" +
-      "如果每条都交给大模型：" + MSG.length + " 次调用。两级过滤省掉了 " + SA.fmt((100 * drop) / MSG.length, 0) + "% 的调用。\n" +
+    CL.$("#d1-msgs").innerHTML = rows.join("");
+    CL.$("#d1-cnt").innerHTML = "<span>消息 <b>" + MSG.length + "</b></span><span>程序层滤掉 <b>" + drop + "</b></span><span>交给大模型 <b>" + llm + "</b></span><span>最终行动 <b>" + act + "</b></span>";
+    CL.$("#d1-out").textContent = "共 " + MSG.length + " 条消息：程序层滤掉 " + drop + " 条（0 次模型调用），" + llm + " 条进入语义层（" + llm + " 次模型调用），其中 " + act + " 条触发行动。\n" +
+      "如果每条都交给大模型：" + MSG.length + " 次调用。两级过滤省掉了 " + CL.fmt((100 * drop) / MSG.length, 0) + "% 的调用。\n" +
       "行动的消息里，" + MSG.filter((m) => m.explicit && pol[m.s] !== "ignore").length + " 条是明确请求，其余是语义层策略主动接下的。";
   }
-  SA.$("#d1-demo").addEventListener("change", draw1);
+  CL.$("#d1-demo").addEventListener("change", draw1);
   draw1();
 
   /* ---- 2. 订阅与直通 ---- */
@@ -325,21 +327,21 @@ SA.onReady(function () {
   }
   let step = 0;
   function draw2() {
-    const pt = SA.$("#d2-pt").checked, r = play(step, pt);
-    SA.$("#d2-log").innerHTML = r.log.map((x) => '<li class="' + x[0] + '"><span class="src">' + SA.esc(x[1]) + "</span><span>" + SA.esc(x[2]) + '</span><span class="verdict">' + SA.esc(x[3]) + "</span></li>").join("") || '<li class="drop"><span class="src">—</span><span>点“下一条事件”开始。</span><span class="verdict"></span></li>';
-    SA.$("#d2-log").scrollTop = 1e9; // 新事件总在底部可见
+    const pt = CL.$("#d2-pt").checked, r = play(step, pt);
+    CL.$("#d2-log").innerHTML = r.log.map((x) => '<li class="' + x[0] + '"><span class="src">' + CL.esc(x[1]) + "</span><span>" + CL.esc(x[2]) + '</span><span class="verdict">' + CL.esc(x[3]) + "</span></li>").join("") || '<li class="drop"><span class="src">—</span><span>点“下一条事件”开始。</span><span class="verdict"></span></li>';
+    CL.$("#d2-log").scrollTop = 1e9; // 新事件总在底部可见
     const ws = Object.keys(r.subs);
-    SA.$("#d2-subs").innerHTML = ws.length ? ws.map((w) => "<div><b>" + w + " 订阅</b>" + r.subs[w].map((t) => '<span class="pill' + (t.startsWith("PR") ? " hot" : " fast") + '">' + SA.esc(t) + "</span>").join("") + "</div>").join("") : "<div><b>订阅表</b>还没有 Worker。</div>";
-    SA.$("#d2-cnt").innerHTML = "<span>已播放 <b>" + step + "/" + SCRIPT.length + "</b></span><span>Trigger <b>" + r.triggers + "</b></span><span>Router 决定 <b>" + r.dec + "</b></span><span>直通 <b>" + r.fast + "</b></span>";
+    CL.$("#d2-subs").innerHTML = ws.length ? ws.map((w) => "<div><b>" + w + " 订阅</b>" + r.subs[w].map((t) => '<span class="pill' + (t.startsWith("PR") ? " hot" : " fast") + '">' + CL.esc(t) + "</span>").join("") + "</div>").join("") : "<div><b>订阅表</b>还没有 Worker。</div>";
+    CL.$("#d2-cnt").innerHTML = "<span>已播放 <b>" + step + "/" + SCRIPT.length + "</b></span><span>Trigger <b>" + r.triggers + "</b></span><span>Router 决定 <b>" + r.dec + "</b></span><span>直通 <b>" + r.fast + "</b></span>";
     const on = play(SCRIPT.length, true), off = play(SCRIPT.length, false);
-    SA.$("#d2-out").textContent = "当前：直通" + (pt ? "开" : "关") + "，已播放 " + step + " 条，Router 做了 " + r.dec + " 个决定，" + r.fast + " 条走了 Fast Path。\n" +
-      "整段脚本对比：直通开 → Router 决定 " + on.dec + " 个；直通关 → " + off.dec + " 个（多 " + SA.fmt((100 * (off.dec - on.dec)) / on.dec, 0) + "%）。\n" +
+    CL.$("#d2-out").textContent = "当前：直通" + (pt ? "开" : "关") + "，已播放 " + step + " 条，Router 做了 " + r.dec + " 个决定，" + r.fast + " 条走了 Fast Path。\n" +
+      "整段脚本对比：直通开 → Router 决定 " + on.dec + " 个；直通关 → " + off.dec + " 个（多 " + CL.fmt((100 * (off.dec - on.dec)) / on.dec, 0) + "%）。\n" +
       "原文实验（约 300 条消息）：去掉直通，Router 决定约 +30%，读缓存 token +37%，完成时间基本不变。";
   }
-  SA.$("#d2-next").addEventListener("click", () => { if (step < SCRIPT.length) step++; draw2(); });
-  SA.$("#d2-all").addEventListener("click", () => { step = SCRIPT.length; draw2(); });
-  SA.$("#d2-reset").addEventListener("click", () => { step = 0; draw2(); });
-  SA.$("#d2-pt").addEventListener("change", draw2);
+  CL.$("#d2-next").addEventListener("click", () => { if (step < SCRIPT.length) step++; draw2(); });
+  CL.$("#d2-all").addEventListener("click", () => { step = SCRIPT.length; draw2(); });
+  CL.$("#d2-reset").addEventListener("click", () => { step = 0; draw2(); });
+  CL.$("#d2-pt").addEventListener("change", draw2);
   draw2();
 });
 </script>

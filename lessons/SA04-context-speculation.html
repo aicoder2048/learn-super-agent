@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>上下文组织与提前行动 · SA04</title>
-<link rel="stylesheet" href="assets/sa-lesson.css">
+<link rel="stylesheet" href="assets/course.css">
+<link rel="stylesheet" href="assets/course-theme.css">
 <script src="assets/glossary-data.js"></script>
-<script src="assets/sa-lib.js"></script>
+<script src="assets/course-config.js"></script>
+<script src="assets/course-lib.js"></script>
 <style>
   .ctx-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13.5px; }
   .ctx-list li { display: grid; grid-template-columns: 74px minmax(0, 1fr) 64px; gap: 10px; align-items: start; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
@@ -35,7 +37,7 @@
 </style>
 </head>
 <body>
-<header id="sa-topbar"></header>
+<header id="cl-topbar"></header>
 
 <div class="layout">
 <aside class="toc">
@@ -256,13 +258,13 @@
   </div>
 </section>
 
-<nav id="sa-pager" data-current="SA04-context-speculation.html"></nav>
+<nav id="cl-pager" data-current="SA04-context-speculation.html"></nav>
 <p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§3.3–3.4（2026-10-31）。标为“补充”的内容和模拟演示是课程作者的解释，不是原文观点；演示里的消息、ID 和数字都是虚构的示意。</p>
 </main>
 </div>
 
 <script>
-SA.onReady(function () {
+CL.onReady(function () {
   /* ---- 1. Inline & Spill 游乐场 ---- */
   // step: 原文三步；len: 完整字数；cut: 可截断（Spill 到 50 字 + 续读入口）；need: 完成请求需要
   const ITEMS = [
@@ -287,21 +289,21 @@ SA.onReady(function () {
   }
   function calls(p) { return p.filter((x) => x.it.need && x.st !== "in").length; }
   function draw1() {
-    const b = +SA.$("#d1-b").value; SA.$("#d1-bv").textContent = b;
+    const b = +CL.$("#d1-b").value; CL.$("#d1-bv").textContent = b;
     const p = plan(b);
     const LBL = { in: "Inline", cut: "Spill 截断", out: "只留引用" };
-    SA.$("#d1-list").innerHTML = p.map((x) => '<li class="' + x.st + '"><span class="st">' + LBL[x.st] + '</span><span class="body">' + (x.it.need ? '<span class="need">★ </span>' : "") + "<b>" + x.it.name + "</b>（" + (x.st === "cut" && x.it.step === 2 ? "第 2 步内联前 " + CAP + " 字，其余按第 3 步 Spill" : "第 " + x.it.step + " 步") + "）<small>" + x.it.txt +
+    CL.$("#d1-list").innerHTML = p.map((x) => '<li class="' + x.st + '"><span class="st">' + LBL[x.st] + '</span><span class="body">' + (x.it.need ? '<span class="need">★ </span>' : "") + "<b>" + x.it.name + "</b>（" + (x.st === "cut" && x.it.step === 2 ? "第 2 步内联前 " + CAP + " 字，其余按第 3 步 Spill" : "第 " + x.it.step + " 步") + "）<small>" + x.it.txt +
       (x.st === "cut" ? " → 截到前 " + CAP + " 字 + <code>read(…)</code> 续读入口" : x.st === "out" ? (x.n ? " → 只保留 ID，需要时调用工具读取" : " → 预算用尽，未注入") : "") + '</small></span><span class="n">' + x.n + " / " + x.it.len + "</span></li>").join("");
     const used = p.reduce((s, x) => s + x.n, 0), waste = p.filter((x) => !x.it.need).reduce((s, x) => s + x.n, 0), c = calls(p);
-    SA.$("#d1-bar").style.width = Math.min(100, (100 * used) / Math.max(b, 1)) + "%";
+    CL.$("#d1-bar").style.width = Math.min(100, (100 * used) / Math.max(b, 1)) + "%";
     // 扫一遍预算，找出“调用数最少时的最小预算”
     let best = null; for (let k = 20; k <= 2400; k += 10) { const q = plan(k); if (best == null || calls(q) < calls(plan(best))) best = k; }
-    SA.$("#d1-out").textContent =
-      "预算 " + b + " 字：注入 " + used + " 字，其中与本请求无关 " + waste + " 字（" + SA.fmt((100 * waste) / Math.max(1, used), 0) + "%）\n" +
+    CL.$("#d1-out").textContent =
+      "预算 " + b + " 字：注入 " + used + " 字，其中与本请求无关 " + waste + " 字（" + CL.fmt((100 * waste) / Math.max(1, used), 0) + "%）\n" +
       "预计额外工具调用 " + c + " 次（缺失或被截断的 ★ 信息）\n" +
       "在这个模型里，预算约 " + best + " 字时调用数已降到最低（" + calls(plan(best)) + " 次）；再加预算，只会增加无关字数。";
   }
-  SA.$("#d1-b").addEventListener("input", draw1); draw1();
+  CL.$("#d1-b").addEventListener("input", draw1); draw1();
 
   /* ---- 2. 链式召回 ---- */
   const NODES = {
@@ -322,26 +324,26 @@ SA.onReady(function () {
   let opened = new Set(["t57"]);
   function draw2(last) {
     for (const [id, n] of Object.entries(NODES)) {
-      const g = SA.$('#demo2 [data-node="' + id + '"]');
+      const g = CL.$('#demo2 [data-node="' + id + '"]');
       const isOpen = opened.has(id), avail = !isOpen && n.parent && opened.has(n.parent);
       g.classList.toggle("open", isOpen); g.classList.toggle("next", !!avail); g.classList.toggle("locked", !isOpen && !avail);
-      if (n.edge) { const e = SA.$('#demo2 [data-e="' + n.edge + '"]'); e.classList.toggle("hl", isOpen); e.classList.toggle("dash", !isOpen); }
+      if (n.edge) { const e = CL.$('#demo2 [data-e="' + n.edge + '"]'); e.classList.toggle("hl", isOpen); e.classList.toggle("dash", !isOpen); }
     }
     const lid = last || "t57";
-    SA.$("#d2-ret").textContent = NODES[lid].ret;
+    CL.$("#d2-ret").textContent = NODES[lid].ret;
     const hops = opened.size - 1, chars = [...opened].reduce((s, id) => s + NODES[id].size, 0);
     const done = ANSWER.every((a) => opened.has(a));
-    SA.$("#d2-out").textContent =
+    CL.$("#d2-out").textContent =
       "已展开 " + hops + " 跳，读入约 " + chars + " 字（示意）。路径：" + [...opened].map((x) => "#" + x.replace(/\D/g, "")).join(" → ") + "\n" +
       (done ? "✓ 已能回答：PR #2210 昨天 18:20 已 merge。Router 只读了需要的几个对象，没有加载整段历史。" : "还不能回答。点虚线框，沿着已知 ID 继续读。");
   }
-  SA.$$("#demo2 [data-node]").forEach((g) => g.addEventListener("click", () => {
+  CL.$$("#demo2 [data-node]").forEach((g) => g.addEventListener("click", () => {
     const id = g.dataset.node, n = NODES[id];
     if (opened.has(id)) return draw2(id);
     if (n.parent && opened.has(n.parent)) { opened.add(id); draw2(id); }
   }));
-  SA.$("#d2-reset").addEventListener("click", () => { opened = new Set(["t57"]); draw2(); });
-  SA.$("#d2-auto").addEventListener("click", () => {
+  CL.$("#d2-reset").addEventListener("click", () => { opened = new Set(["t57"]); draw2(); });
+  CL.$("#d2-auto").addEventListener("click", () => {
     opened = new Set(["t57"]); draw2();
     ["th12", "w05", "th31"].forEach((id, k) => setTimeout(() => { opened.add(id); draw2(id); }, 700 * (k + 1)));
   });
@@ -356,7 +358,7 @@ SA.onReady(function () {
   };
   let cur = "ok";
   function draw3() {
-    const c = CASES[cur], spec = SA.$("#d3-spec").checked;
+    const c = CASES[cur], spec = CL.$("#d3-spec").checked;
     const work = c.repro + c.fix;
     const lanes = [{ name: "群聊讨论", segs: [{ t0: 0, t1: 1, cls: "c5", text: "报问题" }, { t0: 1, t1: c.discEnd, cls: "c6", text: "讨论：改训练？转义？改渲染？" }] }];
     let wait, compute, msgs, deliverAt = null;
@@ -381,20 +383,20 @@ SA.onReady(function () {
       lanes.push({ name: "Agent（被叫后）", segs });
       compute = work; msgs = 2; wait = start + work;
     }
-    SA.lanes("#d3-lanes", lanes, { t1: 50, unit: " 分" });
+    CL.lanes("#d3-lanes", lanes, { t1: 50, unit: " 分" });
     const extra = spec ? compute - (c.deliver ? work : 0) : 0;
     let note;
-    if (spec && c.deliver) note = "讨论还没结束（第 " + c.discEnd + " 分钟），修复已在第 " + SA.fmt(deliverAt, 0) + " 分钟交付。人只需要审一个 PR。";
+    if (spec && c.deliver) note = "讨论还没结束（第 " + c.discEnd + " 分钟），修复已在第 " + CL.fmt(deliverAt, 0) + " 分钟交付。人只需要审一个 PR。";
     else if (spec) note = "后台花了 " + compute + " Agent·分钟，没有达到交付条件，结果被丢弃。这 " + compute + " 分钟是赌输白花的算力。群里一条消息都没多，人没有被打扰。";
     else if (!c.deliver) note = "没人确认问题，也就没人 @agent。Agent 一分钟算力都不花，这件事也没有人得到结果。";
-    else note = "人要先讨论、再 @agent、再等它干完：从报问题到拿到结果用了 " + SA.fmt(wait, 0) + " 分钟，并且至少要发出和读 " + msgs + " 条消息。";
-    SA.$("#d3-out").textContent =
+    else note = "人要先讨论、再 @agent、再等它干完：从报问题到拿到结果用了 " + CL.fmt(wait, 0) + " 分钟，并且至少要发出和读 " + msgs + " 条消息。";
+    CL.$("#d3-out").textContent =
       "情形：" + c.name + " · 投机执行：" + (spec ? "开" : "关") + "\n" +
       "后台算力消耗：" + compute + " Agent·分钟" + (spec ? "（比不投机多花 " + extra + " Agent·分钟）" : "") + "\n" +
-      "人等到结果：" + (wait == null ? "—（没有结果需要人看）" : SA.fmt(wait, 0) + " 分钟") + "；Agent 发出的消息：" + msgs + " 条\n" + note;
+      "人等到结果：" + (wait == null ? "—（没有结果需要人看）" : CL.fmt(wait, 0) + " 分钟") + "；Agent 发出的消息：" + msgs + " 条\n" + note;
   }
-  SA.$$("#d3-case .btn").forEach((b) => b.addEventListener("click", () => { cur = b.dataset.c; SA.$$("#d3-case .btn").forEach((x) => x.classList.toggle("on", x === b)); draw3(); }));
-  SA.$("#d3-spec").addEventListener("change", draw3);
+  CL.$$("#d3-case .btn").forEach((b) => b.addEventListener("click", () => { cur = b.dataset.c; CL.$$("#d3-case .btn").forEach((x) => x.classList.toggle("on", x === b)); draw3(); }));
+  CL.$("#d3-spec").addEventListener("change", draw3);
   draw3();
 });
 </script>

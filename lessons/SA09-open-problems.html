@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>开放问题与全课总结 · SA09</title>
-<link rel="stylesheet" href="assets/sa-lesson.css">
+<link rel="stylesheet" href="assets/course.css">
+<link rel="stylesheet" href="assets/course-theme.css">
 <script src="assets/glossary-data.js"></script>
-<script src="assets/sa-lib.js"></script>
+<script src="assets/course-config.js"></script>
+<script src="assets/course-lib.js"></script>
 <style>
   .ctl-row { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 13.5px; color: var(--ink-2); margin-bottom: 10px; }
   .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; }
@@ -28,7 +30,7 @@
 </style>
 </head>
 <body>
-<header id="sa-topbar"></header>
+<header id="cl-topbar"></header>
 
 <div class="layout">
 <aside class="toc">
@@ -260,13 +262,13 @@
   </div>
 </section>
 
-<nav id="sa-pager" data-current="SA09-open-problems.html"></nav>
+<nav id="cl-pager" data-current="SA09-open-problems.html"></nav>
 <p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§8–9（2026-10-31）。原型相关内容引自 dsh-superagent-prototype 文档。标为“补充”的内容和模拟演示是课程作者的解释，不是原文观点。</p>
 </main>
 </div>
 
 <script>
-SA.onReady(function () {
+CL.onReady(function () {
   /* ---- 1. 部署边界规划器 ---- */
   const NODES = {
     TA: { x: 180, y: 70, label: "团队 A 研发", sub: "仓库 A" },
@@ -282,7 +284,7 @@ SA.onReady(function () {
     ["CA", "TB", "把客户邮件转成 Issue", 492, 150, "end"], ["DA", "TB", "询问发布进度", 600, 150, "start"],
     ["TA", "TB", "跨团队接口变更", 360, 60, "middle"], ["AL", "CA", "约跨团队评审会", 270, 292, "middle"],
   ];
-  const COLORS = [SA.C.blue, SA.C.orange, SA.C.teal, SA.C.purple, SA.C.gold, SA.C.pink];
+  const COLORS = [CL.C.blue, CL.C.orange, CL.C.teal, CL.C.purple, CL.C.gold, CL.C.pink];
   function groups(ma, mb, mab) {
     const p = {}; Object.keys(NODES).forEach((k) => (p[k] = k));
     const f = (k) => (p[k] === k ? k : (p[k] = f(p[k])));
@@ -295,7 +297,7 @@ SA.onReady(function () {
     return { g, n };
   }
   function draw1() {
-    const ma = SA.$("#d1-ma").checked, mb = SA.$("#d1-mb").checked, mab = SA.$("#d1-mab").checked;
+    const ma = CL.$("#d1-ma").checked, mb = CL.$("#d1-mb").checked, mab = CL.$("#d1-mab").checked;
     const { g, n } = groups(ma, mb, mab);
     let s = "", a2a = 0, inner = 0; const a2aList = [], innerList = [];
     for (const [a, b, why, lx, ly, anchor] of NEEDS) {
@@ -303,7 +305,7 @@ SA.onReady(function () {
       const curved = a === "AL" && b === "CA";
       const d = curved ? "M" + A.x + " " + (A.y + 26) + " Q " + (A.x + B.x) / 2 + " 330 " + B.x + " " + (B.y + 26) : "M" + A.x + " " + A.y + " L " + B.x + " " + B.y;
       s += '<path class="' + (cross ? "a2a" : "inner") + '" d="' + d + '"/>';
-      s += '<text class="lbl" x="' + lx + '" y="' + ly + '" text-anchor="' + anchor + '">' + SA.esc(why) + "</text>";
+      s += '<text class="lbl" x="' + lx + '" y="' + ly + '" text-anchor="' + anchor + '">' + CL.esc(why) + "</text>";
       if (cross) { a2a++; a2aList.push(NODES[a].label + " ↔ " + NODES[b].label + "（" + why + "）"); } else { inner++; innerList.push(NODES[a].label + " ↔ " + NODES[b].label); }
     }
     for (const [k, nd] of Object.entries(NODES)) {
@@ -311,19 +313,19 @@ SA.onReady(function () {
       s += '<g class="node"><rect x="' + (nd.x - 70) + '" y="' + (nd.y - 26) + '" width="140" height="52" rx="9" style="fill:var(--surface)"/><rect x="' + (nd.x - 70) + '" y="' + (nd.y - 26) + '" width="140" height="52" rx="9" fill="' + c + '" fill-opacity="0.18" stroke="' + c + '" stroke-width="2"/>' +
         '<text x="' + nd.x + '" y="' + (nd.y - 3) + '" text-anchor="middle" style="fill:var(--ink);font-weight:600">' + nd.label + '</text><text class="lbl" x="' + nd.x + '" y="' + (nd.y + 15) + '" text-anchor="middle">' + nd.sub + "</text></g>";
     }
-    SA.$("#d1-svg").innerHTML = s;
+    CL.$("#d1-svg").innerHTML = s;
     const exposed = [];
     for (const k of ["AL", "BO", "CA", "DA"]) {
       const mates = Object.keys(NODES).filter((x) => x !== k && g[x] === g[k]);
       if (mates.length) exposed.push(NODES[k].label.replace(" 助手", "") + " 的私人邮件和日程与「" + mates.map((x) => NODES[x].label).join("、") + "」共享上下文");
     }
-    SA.$("#d1-out").textContent =
+    CL.$("#d1-out").textContent =
       "实例数：" + n + "　共享上下文内的协作：" + inner + " 条　需要 A2A 的跨边界协作：" + a2a + " 条　隐私暴露：" + exposed.length + " 处\n" +
       (a2aList.length ? "需要 A2A：\n  · " + a2aList.join("\n  · ") + "\n" : "需要 A2A：无\n") +
       (exposed.length ? "隐私暴露：\n  · " + exposed.join("\n  · ") : "隐私暴露：无（每个人的私人信息只在自己的实例里）");
   }
-  ["#d1-ma", "#d1-mb", "#d1-mab"].forEach((id) => SA.$(id).addEventListener("change", draw1));
-  SA.onTheme(draw1);
+  ["#d1-ma", "#d1-mb", "#d1-mab"].forEach((id) => CL.$(id).addEventListener("change", draw1));
+  CL.onTheme(draw1);
   draw1();
 
   /* ---- 2. 注入走查 ---- */
@@ -349,14 +351,14 @@ SA.onReady(function () {
   ];
   let cur = 0;
   function draw2() {
-    SA.$("#d2-flow").innerHTML = STEPS.map((s, i) => (i ? '<span class="arr">→</span>' : "") + '<button type="button" data-i="' + i + '" class="' + (i === cur ? "on" : i < cur ? "past" : "") + '">' + (i + 1) + " " + s.k + "</button>").join("");
+    CL.$("#d2-flow").innerHTML = STEPS.map((s, i) => (i ? '<span class="arr">→</span>' : "") + '<button type="button" data-i="' + i + '" class="' + (i === cur ? "on" : i < cur ? "past" : "") + '">' + (i + 1) + " " + s.k + "</button>").join("");
     const s = STEPS[cur];
-    SA.$("#d2-card").innerHTML = "<h4>" + SA.esc(s.t) + "</h4><dl><dt>原文</dt><dd>" + SA.esc(s.art) + "</dd><dt>原型文档</dt><dd>" + SA.esc(s.proto) + "</dd><dt>风险</dt><dd>" + SA.esc(s.risk) + "</dd></dl>";
-    SA.$("#d2-prev").disabled = cur === 0; SA.$("#d2-next").disabled = cur === STEPS.length - 1;
+    CL.$("#d2-card").innerHTML = "<h4>" + CL.esc(s.t) + "</h4><dl><dt>原文</dt><dd>" + CL.esc(s.art) + "</dd><dt>原型文档</dt><dd>" + CL.esc(s.proto) + "</dd><dt>风险</dt><dd>" + CL.esc(s.risk) + "</dd></dl>";
+    CL.$("#d2-prev").disabled = cur === 0; CL.$("#d2-next").disabled = cur === STEPS.length - 1;
   }
-  SA.$("#d2-flow").addEventListener("click", (e) => { const b = e.target.closest("button[data-i]"); if (b) { cur = +b.dataset.i; draw2(); } });
-  SA.$("#d2-prev").addEventListener("click", () => { if (cur > 0) { cur--; draw2(); } });
-  SA.$("#d2-next").addEventListener("click", () => { if (cur < STEPS.length - 1) { cur++; draw2(); } });
+  CL.$("#d2-flow").addEventListener("click", (e) => { const b = e.target.closest("button[data-i]"); if (b) { cur = +b.dataset.i; draw2(); } });
+  CL.$("#d2-prev").addEventListener("click", () => { if (cur > 0) { cur--; draw2(); } });
+  CL.$("#d2-next").addEventListener("click", () => { if (cur < STEPS.length - 1) { cur++; draw2(); } });
   draw2();
 });
 </script>

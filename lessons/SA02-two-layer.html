@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>双层架构 · SA02</title>
-<link rel="stylesheet" href="assets/sa-lesson.css">
+<link rel="stylesheet" href="assets/course.css">
+<link rel="stylesheet" href="assets/course-theme.css">
 <script src="assets/glossary-data.js"></script>
-<script src="assets/sa-lib.js"></script>
+<script src="assets/course-config.js"></script>
+<script src="assets/course-lib.js"></script>
 <style>
   .scheme { margin: 4px 0 16px; }
   .scheme h5 { margin: 0 0 6px; font-size: 14px; color: var(--brand); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
@@ -15,7 +17,7 @@
 </style>
 </head>
 <body>
-<header id="sa-topbar"></header>
+<header id="cl-topbar"></header>
 
 <div class="layout">
 <aside class="toc">
@@ -226,13 +228,13 @@
   </div>
 </section>
 
-<nav id="sa-pager" data-current="SA02-two-layer.html"></nav>
+<nav id="cl-pager" data-current="SA02-two-layer.html"></nav>
 <p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§2、§7.2（2026-10-31）。标为“补充”的内容和模拟演示是课程作者的解释，不是原文观点。</p>
 </main>
 </div>
 
 <script>
-SA.onReady(function () {
+CL.onReady(function () {
   /* ---- 1. 三种组织方式 ---- */
   const EV = [
     { k: 0, task: "A", kind: "new", text: "A 新任务：修登录测试" },
@@ -273,33 +275,33 @@ SA.onReady(function () {
     };
   }
   function draw1() {
-    const W = +SA.$("#d1-w").value, g = +SA.$("#d1-g").value;
-    SA.$("#d1-wv").textContent = W; SA.$("#d1-gv").textContent = g;
+    const W = +CL.$("#d1-w").value, g = +CL.$("#d1-g").value;
+    CL.$("#d1-wv").textContent = W; CL.$("#d1-gv").textContent = g;
     const r = run(W, g), t1 = Math.max(r.one.st.make, r.many.st.make, r.two.st.make);
-    const box = SA.$("#d1-demo");
+    const box = CL.$("#d1-demo");
     box.innerHTML = '<div class="scheme"><h5>① 所有事件进同一个 Session <small>回复：1 个声音 · 上下文连续 · 多任务细节混在一起</small></h5><div id="d1-a"></div></div>' +
       '<div class="scheme"><h5>② 每个事件新开一个 Session <small>回复：6 个声音 · A、B 的跟进落进了不知情的新 Session</small></h5><div id="d1-b"></div></div>' +
       '<div class="scheme"><h5>③ 双层架构：Router + Worker <small>回复：只由 Router 统一回复 · 跟进转给原 Worker</small></h5><div id="d1-c"></div></div>';
-    SA.lanes("#d1-a", r.one.lanes, { t1, unit: " 分" });
-    SA.lanes("#d1-b", r.many.lanes, { t1, unit: " 分" });
-    SA.lanes("#d1-c", r.two.lanes, { t1, unit: " 分" });
+    CL.lanes("#d1-a", r.one.lanes, { t1, unit: " 分" });
+    CL.lanes("#d1-b", r.many.lanes, { t1, unit: " 分" });
+    CL.lanes("#d1-c", r.two.lanes, { t1, unit: " 分" });
     // 差值 d > 0 表示双层更快；|d| < 0.05 分钟算持平，避免出现“快 -0.3 分钟”
-    const vs = (name, d) => name + (Math.abs(d) < 0.05 ? "基本持平" : (d > 0 ? "快 " : "慢 ") + SA.fmt(Math.abs(d), 1) + " 分钟");
-    const row = (n, s, a, b, c) => n + "：全部完成 " + SA.fmt(s.make, 1) + " 分，平均任务耗时 " + SA.fmt(s.avg, 1) + " 分\n    统一回复 " + a + "  上下文连续 " + b + "  跟进生效 " + c;
-    SA.$("#d1-out").textContent =
+    const vs = (name, d) => name + (Math.abs(d) < 0.05 ? "基本持平" : (d > 0 ? "快 " : "慢 ") + CL.fmt(Math.abs(d), 1) + " 分钟");
+    const row = (n, s, a, b, c) => n + "：全部完成 " + CL.fmt(s.make, 1) + " 分，平均任务耗时 " + CL.fmt(s.avg, 1) + " 分\n    统一回复 " + a + "  上下文连续 " + b + "  跟进生效 " + c;
+    CL.$("#d1-out").textContent =
       row("① 单 Session", r.one.st, "✓", "✓", "✓") + "\n" +
       row("② 每事件一个", r.many.st, "✗", "✗", "✗（原 Session 仍按旧方案）") + "\n" +
       row("③ 双层架构", r.two.st, "✓", "✓", "✓") + "\n" +
       vs("双层比单 Session ", r.one.st.make - r.two.st.make) + "；" + vs("比“每事件一个”", r.many.st.make - r.two.st.make) + "，但没有割裂和混乱。";
   }
-  ["#d1-w", "#d1-g"].forEach((id) => SA.$(id).addEventListener("input", draw1));
+  ["#d1-w", "#d1-g"].forEach((id) => CL.$(id).addEventListener("input", draw1));
   draw1();
 
   /* ---- 2. Router 批处理 ---- */
   const DUR = 600, SHOW = 60;
   const cost = { prefill: (b) => 1.72 + 0.78 * b, naive: (b) => 2.5 * b };
   function sim(rate, mode) {
-    const r = SA.rng(11), arr = []; let t = 0; for (let w = 0; w < 50; w++) r(); // 预热：小种子的前几十个数不够随机
+    const r = CL.rng(11), arr = []; let t = 0; for (let w = 0; w < 50; w++) r(); // 预热：小种子的前几十个数不够随机
     while (true) { t += -Math.log(1 - r()) * (60 / rate); if (t > DUR) break; arr.push(t); }
     const segs = [], waits = [], batches = [], reqs = []; let now = 0, i = 0, maxQ = 0;
     while (i < arr.length) {
@@ -307,29 +309,29 @@ SA.onReady(function () {
       let j = i; while (j < arr.length && arr[j] <= now) j++;
       const b = j - i; maxQ = Math.max(maxQ, b);
       const d = cost[mode](b), end = now + d;
-      segs.push({ t0: now, t1: end, cls: "c4", text: String(b), title: "合并 " + b + " 条，耗时 " + SA.fmt(d, 1) + " 秒" });
+      segs.push({ t0: now, t1: end, cls: "c4", text: String(b), title: "合并 " + b + " 条，耗时 " + CL.fmt(d, 1) + " 秒" });
       for (let k = i; k < j; k++) waits.push(end - arr[k]);
       batches.push(b); reqs.push(d); now = end; i = j;
     }
     const avg = (a) => a.reduce((s, x) => s + x, 0) / Math.max(1, a.length);
-    return { arr, segs, avgB: avg(batches), avgT: avg(reqs), amort: avg(reqs) / avg(batches), avgW: avg(waits), p95W: SA.pctl(waits, 95), maxQ, n: arr.length };
+    return { arr, segs, avgB: avg(batches), avgT: avg(reqs), amort: avg(reqs) / avg(batches), avgW: avg(waits), p95W: CL.pctl(waits, 95), maxQ, n: arr.length };
   }
   function draw2() {
-    const rate = +SA.$("#d2-r").value, mode = SA.$("#d2-m").value;
-    SA.$("#d2-rv").textContent = rate;
+    const rate = +CL.$("#d2-r").value, mode = CL.$("#d2-m").value;
+    CL.$("#d2-rv").textContent = rate;
     const s = sim(rate, mode);
     const show = (segs) => segs.filter((g) => g.t0 < SHOW).map((g) => Object.assign({}, g, { t1: Math.min(g.t1, SHOW) }));
-    SA.lanes("#d2-lanes", [
+    CL.lanes("#d2-lanes", [
       { name: "Trigger 到达", segs: s.arr.filter((x) => x < SHOW).map((x) => ({ t0: x, t1: x + 0.35, cls: "c2" })) },
       { name: "Router", segs: show(s.segs) },
     ], { t1: SHOW, unit: " 秒" });
-    SA.$("#d2-out").textContent =
+    CL.$("#d2-out").textContent =
       "10 分钟内到达 " + s.n + " 条 Trigger（" + (mode === "prefill" ? "合并很便宜" : "每条全价") + "）\n" +
-      "平均 batch " + SA.fmt(s.avgB, 2) + " 条 · 单次请求 " + SA.fmt(s.avgT, 1) + " 秒 · 每条分摊 " + SA.fmt(s.amort, 2) + " 秒\n" +
-      "Trigger 从到达到被处理完：平均 " + SA.fmt(s.avgW, 1) + " 秒，p95 " + SA.fmt(s.p95W, 1) + " 秒；单轮最多合并 " + s.maxQ + " 条" +
+      "平均 batch " + CL.fmt(s.avgB, 2) + " 条 · 单次请求 " + CL.fmt(s.avgT, 1) + " 秒 · 每条分摊 " + CL.fmt(s.amort, 2) + " 秒\n" +
+      "Trigger 从到达到被处理完：平均 " + CL.fmt(s.avgW, 1) + " 秒，p95 " + CL.fmt(s.p95W, 1) + " 秒；单轮最多合并 " + s.maxQ + " 条" +
       (s.p95W > 30 ? "\n⚠ 等待时间越积越长：Router 跟不上到达速率了。" : "");
   }
-  SA.$("#d2-r").addEventListener("input", draw2); SA.$("#d2-m").addEventListener("change", draw2);
+  CL.$("#d2-r").addEventListener("input", draw2); CL.$("#d2-m").addEventListener("change", draw2);
   draw2();
 });
 </script>

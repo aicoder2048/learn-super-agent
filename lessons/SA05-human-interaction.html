@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>面向人的交互 · SA05</title>
-<link rel="stylesheet" href="assets/sa-lesson.css">
+<link rel="stylesheet" href="assets/course.css">
+<link rel="stylesheet" href="assets/course-theme.css">
 <script src="assets/glossary-data.js"></script>
-<script src="assets/sa-lib.js"></script>
+<script src="assets/course-config.js"></script>
+<script src="assets/course-lib.js"></script>
 <style>
   .out-box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 12px 14px; font-size: 14px; line-height: 1.75; white-space: pre-wrap; min-height: 120px; }
   .out-box.im { max-width: 560px; border-radius: 14px; background: var(--note-bg); border-color: var(--note-bd); }
@@ -23,7 +25,7 @@
 </style>
 </head>
 <body>
-<header id="sa-topbar"></header>
+<header id="cl-topbar"></header>
 
 <div class="layout">
 <aside class="toc">
@@ -186,20 +188,20 @@
   </div>
 </section>
 
-<nav id="sa-pager" data-current="SA05-human-interaction.html"></nav>
+<nav id="cl-pager" data-current="SA05-human-interaction.html"></nav>
 <p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§4（2026-10-31）。标为“补充”的内容和模拟演示是课程作者的解释，不是原文观点；示例消息为虚构。</p>
 </main>
 </div>
 
 <script>
-SA.onReady(function () {
+CL.onReady(function () {
   /* ---- 1. 同步 vs 异步 ReAct Loop ---- */
   const L = 4;
   function draw1() {
-    const D = +SA.$("#d1-d").value, mEl = SA.$("#d1-m");
+    const D = +CL.$("#d1-d").value, mEl = CL.$("#d1-m");
     mEl.max = D - 1; if (+mEl.value > D - 1) mEl.value = D - 1;
-    const m = +mEl.value, stopIt = SA.$("#d1-stop").checked;
-    SA.$("#d1-dv").textContent = D; SA.$("#d1-mv").textContent = m;
+    const m = +mEl.value, stopIt = CL.$("#d1-stop").checked;
+    CL.$("#d1-dv").textContent = D; CL.$("#d1-mv").textContent = m;
     const tm = L + m; // 消息 2 的绝对到达时刻
 
     // 经典：0–L 调 run()；L–L+D 工具 + 前台阻塞；L+D–L+D+L 回复（同时看到结果和消息 2）
@@ -228,22 +230,22 @@ SA.onReady(function () {
       wasted = 0;
     }
     const t1 = Math.max(sReply, ...aFront.map((s) => s.t1)) + 2;
-    SA.lanes("#d1-lanes", [
+    CL.lanes("#d1-lanes", [
       { name: "经典 · 前台", segs: sFront, ticks: [tm] },
       { name: "经典 · 工具", segs: sTool },
       { name: "异步 · 前台", segs: aFront, ticks: [tm] },
       { name: "异步 · 后台", segs: aTool },
     ], { t1, unit: " 秒" });
     const sWasted = stopIt ? D : 0;
-    SA.$("#d1-out").textContent =
+    CL.$("#d1-out").textContent =
       "时间从模型发起工具调用算起。消息 2 在第 " + tm + " 秒到达（工具开始后 " + m + " 秒）\n" +
       "经典 ReAct Loop：第 " + sReply + " 秒才回应，用户等了 " + sWait + " 秒\n" +
       "异步 ReAct Loop：第 " + r1 + " 秒回应，用户等了 " + aWait + " 秒（等当前推理步结束 " + (r0 - tm) + " 秒 + 回复这一步 " + L + " 秒）\n" +
       (stopIt ? "“停下”：经典版的工具白跑了 " + sWasted + " 秒才得知要停；异步版在第 " + toolEnd + " 秒调用 stop()，工具只跑了 " + wasted + " 秒。"
               : "工具结果：经典版在回复里一起交付；异步版在工具完成后作为新事件投递，再用一步交付。");
   }
-  ["#d1-d", "#d1-m"].forEach((id) => SA.$(id).addEventListener("input", draw1));
-  SA.$("#d1-stop").addEventListener("change", draw1);
+  ["#d1-d", "#d1-m"].forEach((id) => CL.$(id).addEventListener("input", draw1));
+  CL.$("#d1-stop").addEventListener("change", draw1);
   draw1();
 
   /* ---- 2. 多信道输出 ---- */
@@ -273,10 +275,10 @@ SA.onReady(function () {
     return { cjk, lat, total: Math.round(cjk / 2 + lat) };
   }
   function draw2() {
-    const bad = SA.$("#d2-bad").checked;
+    const bad = CL.$("#d2-bad").checked;
     const txt = bad ? T.bad : T[ch][sc];
-    const box = SA.$("#d2-box");
-    SA.$("#d2-where").textContent = LBL[ch] + (bad ? "（反面示例）" : "");
+    const box = CL.$("#d2-box");
+    CL.$("#d2-where").textContent = LBL[ch] + (bad ? "（反面示例）" : "");
     box.className = "out-box" + (ch === "im" ? " im" : "") + (txt == null ? " silent" : "");
     box.textContent = txt == null ? "（不发送。任务还在进行，不需要人决策或验收，保持安静。）" : txt;
     const w = txt ? words(txt) : { cjk: 0, lat: 0, total: 0 };
@@ -296,16 +298,16 @@ SA.onReady(function () {
       if (ch === "gh") checks.push([sc !== "done" || (!bad && /问题背景/.test(txt) && /改动说明/.test(txt) && /验证结果/.test(txt)), "PR 交付包含问题背景、改动说明、验证结果"]);
       else checks.push([txt == null || (!bad && /结论|需要你/.test(txt)), "结构化摘要：开头先给结论或要做的决定"]);
     }
-    SA.$("#d2-chk").innerHTML = checks.map((c) => '<li class="' + (c[0] ? "ok" : "no") + '">' + SA.esc(c[1]) + "</li>").join("");
+    CL.$("#d2-chk").innerHTML = checks.map((c) => '<li class="' + (c[0] ? "ok" : "no") + '">' + CL.esc(c[1]) + "</li>").join("");
     const pass = checks.filter((c) => c[0]).length;
-    SA.$("#d2-out").textContent = "信道：" + LBL[ch] + "\n情形：" + ({ done: "已修复，待验收", decide: "需要你决策", wip: "仍在进行" })[sc] + (bad ? "（反面示例）" : "") + "\n" +
+    CL.$("#d2-out").textContent = "信道：" + LBL[ch] + "\n情形：" + ({ done: "已修复，待验收", decide: "需要你决策", wip: "仍在进行" })[sc] + (bad ? "（反面示例）" : "") + "\n" +
       (txt == null ? "输出：不发送" : "输出约 " + w.total + " 词（汉字 " + w.cjk + " 个，英文/数字/代码词 " + w.lat + " 个）") + "\n规范检查：通过 " + pass + " / " + checks.length;
   }
   function group(sel, set) {
-    SA.$$(sel + " .btn").forEach((b) => b.addEventListener("click", () => { set(b.dataset.v); SA.$$(sel + " .btn").forEach((x) => x.classList.toggle("on", x === b)); draw2(); }));
+    CL.$$(sel + " .btn").forEach((b) => b.addEventListener("click", () => { set(b.dataset.v); CL.$$(sel + " .btn").forEach((x) => x.classList.toggle("on", x === b)); draw2(); }));
   }
   group("#d2-ch", (v) => (ch = v)); group("#d2-sc", (v) => (sc = v));
-  SA.$("#d2-bad").addEventListener("change", draw2);
+  CL.$("#d2-bad").addEventListener("change", draw2);
   draw2();
 });
 </script>

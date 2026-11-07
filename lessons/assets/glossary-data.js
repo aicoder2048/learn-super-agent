@@ -1,9 +1,10 @@
 /* 共用术语表数据。glossary.html 用它生成页面；课程页用它显示悬停提示。
  * 字段: term 中文名, en 英文, cat 分类, short 一句话 (悬停提示), body 详细解释 (HTML), see 相关术语 id
- * 分类只用：基础概念 / 架构 / 事件驱动 / 上下文 / 交互 / 运行与可靠性 / 安全与边界 / 原型实现 / 系统设计经典
+ * 分类只用 CL_GLOSSARY_CATS 里列出的。
  * 写法: ASD-STE100 风格 —— 短句、主动语态、一句一个意思、先说是什么再说怎么用。
  */
-window.SA_GLOSSARY = {
+window.CL_GLOSSARY_CATS = ["基础概念", "架构", "事件驱动", "上下文", "交互", "运行与可靠性", "安全与边界", "原型实现", "系统设计经典"];
+window.CL_GLOSSARY = {
   "agent": {"term":"Agent（智能体）","en":"Agent","cat":"基础概念","short":"能调用工具、自己多步推进任务的大模型程序。","body":"<p>普通聊天模型只回答一句话。Agent 会循环地“想一步、调一次工具、看结果、再想下一步”，直到任务完成。</p>","see":["react-loop","session"]},
   "super-agent": {"term":"Super-agent","en":"Super-agent","cat":"基础概念","short":"跨会话保持上下文、同时推进多项任务、持续在线的 Agent 形态及其系统架构。","body":"<p>原文的定义：打破 Agent 与单次手动会话的绑定，使它成为一个能跨会话保持上下文、同时推进多项复杂任务且互不干扰的<b>连续实体</b>。</p><p>四个基础特征：连续、高效、主动、持久。五个模块：双层架构、事件驱动、面向人的交互、计算/状态/环境分离、Watchdog。</p>","see":["four-traits","two-layer"]},
   "session": {"term":"Session（会话）","en":"Session","cat":"基础概念","short":"一段独立的对话上下文。现有 Agent 以它为基本工作单位。","body":"<p>每个 Session 有自己的消息历史。不同 Session 彼此独立，信息不共享。</p><p>原文认为：让用户手动管理 Session 是从底层 LLM API 延续下来的设计惯性。Session 应当是系统的实现细节，而不是用户的认知负担。</p>","see":["super-agent","two-layer"]},

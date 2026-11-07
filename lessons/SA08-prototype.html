@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>开源原型 dsh-superagent 拆解 · SA08</title>
-<link rel="stylesheet" href="assets/sa-lesson.css">
+<link rel="stylesheet" href="assets/course.css">
+<link rel="stylesheet" href="assets/course-theme.css">
 <script src="assets/glossary-data.js"></script>
-<script src="assets/sa-lib.js"></script>
+<script src="assets/course-config.js"></script>
+<script src="assets/course-lib.js"></script>
 <style>
   .ctl-row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13.5px; color: var(--ink-2); margin-bottom: 12px; }
   .ctl-row select { font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
@@ -26,7 +28,7 @@
 </style>
 </head>
 <body>
-<header id="sa-topbar"></header>
+<header id="cl-topbar"></header>
 
 <div class="layout">
 <aside class="toc">
@@ -309,13 +311,13 @@
   </div>
 </section>
 
-<nav id="sa-pager" data-current="SA08-prototype.html"></nav>
+<nav id="cl-pager" data-current="SA08-prototype.html"></nav>
 <p class="disclaimer">来源：<a href="https://github.com/deepseek-ai/dsh-superagent-prototype">deepseek-ai/dsh-superagent-prototype</a> 的 README、SETUP 与 docs/000–007（存档于 <code>docs/articles/prototype-docs/</code>，2026-11-02 抓取）；原文 DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》（2026-10-31）。标为“补充”的内容和模拟演示是课程作者的解释，不是原文或原型文档的观点。</p>
 </main>
 </div>
 
 <script>
-SA.onReady(function () {
+CL.onReady(function () {
   /* ---- 1. 授权与接受模式模拟器 ---- */
   // kind: listed-mention | unlisted-mention | listed-nomention | unlisted-nomention | bot-listed | bot-other | followup-unlisted | ci
   const MSGS = [
@@ -353,19 +355,19 @@ SA.onReady(function () {
     }
   }
   function draw1() {
-    const mode = SA.$("#d1-mode").value, cell = SA.$("#d1-cell").value;
-    const rules = { r1: SA.$("#d1-r1").checked, r2: SA.$("#d1-r2").checked };
+    const mode = CL.$("#d1-mode").value, cell = CL.$("#d1-cell").value;
+    const rules = { r1: CL.$("#d1-r1").checked, r2: CL.$("#d1-r2").checked };
     let n = { act: 0, slow: 0, drop: 0, fast: 0 }, lines = [];
     // 第 7 条只有在第 1 条接单后才存在订阅；第 1 条在任何模式都接单
-    SA.$("#d1-list").innerHTML = MSGS.map((m, i) => {
+    CL.$("#d1-list").innerHTML = MSGS.map((m, i) => {
       const d = decide(m, mode, rules, cell); n[d.cls]++;
       lines.push((i + 1) + ". " + m.who + "「" + m.text + "」→ " + d.v);
-      return '<li class="' + d.cls + '"><span class="src">' + (i + 1) + " · " + SA.esc(m.src) + '</span><span><span class="who">' + SA.esc(m.who) + "</span>" + SA.esc(m.text) + '<span class="why">' + SA.esc(d.why) + '</span></span><span class="verdict">' + SA.esc(d.v) + "</span></li>";
+      return '<li class="' + d.cls + '"><span class="src">' + (i + 1) + " · " + CL.esc(m.src) + '</span><span><span class="who">' + CL.esc(m.who) + "</span>" + CL.esc(m.text) + '<span class="why">' + CL.esc(d.why) + '</span></span><span class="verdict">' + CL.esc(d.v) + "</span></li>";
     }).join("");
-    SA.$("#d1-out").textContent = "模式 " + mode + "，规则 R1 " + (rules.r1 ? "启用" : "停用") + "、R2 " + (rules.r2 ? "启用" : "停用") + "，名单外 @ 单元格 = " + cell + "\n" +
+    CL.$("#d1-out").textContent = "模式 " + mode + "，规则 R1 " + (rules.r1 ? "启用" : "停用") + "、R2 " + (rules.r2 ? "启用" : "停用") + "，名单外 @ 单元格 = " + cell + "\n" +
       "接单 " + n.act + " 条；只记录“本会接受” " + n.slow + " 条；不准入或忽略 " + n.drop + " 条；订阅送达但不扩权 " + n.fast + " 条\n" + lines.join("\n");
   }
-  ["#d1-mode", "#d1-cell", "#d1-r1", "#d1-r2"].forEach((id) => SA.$(id).addEventListener("change", draw1));
+  ["#d1-mode", "#d1-cell", "#d1-r1", "#d1-r2"].forEach((id) => CL.$(id).addEventListener("change", draw1));
   draw1();
 
   /* ---- 2. 一个请求的一生 ---- */
@@ -409,14 +411,14 @@ SA.onReady(function () {
   ];
   let cur = 0;
   function draw2() {
-    SA.$("#d2-flow").innerHTML = STEPS.map((s, i) => (i ? '<span class="arr">→</span>' : "") + '<button type="button" data-i="' + i + '" class="' + (i === cur ? "on" : i < cur ? "past" : "") + '">' + (i + 1) + " " + s.k + "</button>").join("");
+    CL.$("#d2-flow").innerHTML = STEPS.map((s, i) => (i ? '<span class="arr">→</span>' : "") + '<button type="button" data-i="' + i + '" class="' + (i === cur ? "on" : i < cur ? "past" : "") + '">' + (i + 1) + " " + s.k + "</button>").join("");
     const s = STEPS[cur];
-    SA.$("#d2-card").innerHTML = "<h4>第 " + (cur + 1) + " 步 / " + STEPS.length + "：" + SA.esc(s.t) + '</h4><div class="doc">依据：' + SA.esc(s.doc) + "</div><ul>" + s.pts.map((p) => "<li>" + SA.esc(p) + "</li>").join("") + "</ul>";
-    SA.$("#d2-prev").disabled = cur === 0; SA.$("#d2-next").disabled = cur === STEPS.length - 1;
+    CL.$("#d2-card").innerHTML = "<h4>第 " + (cur + 1) + " 步 / " + STEPS.length + "：" + CL.esc(s.t) + '</h4><div class="doc">依据：' + CL.esc(s.doc) + "</div><ul>" + s.pts.map((p) => "<li>" + CL.esc(p) + "</li>").join("") + "</ul>";
+    CL.$("#d2-prev").disabled = cur === 0; CL.$("#d2-next").disabled = cur === STEPS.length - 1;
   }
-  SA.$("#d2-flow").addEventListener("click", (e) => { const b = e.target.closest("button[data-i]"); if (b) { cur = +b.dataset.i; draw2(); } });
-  SA.$("#d2-prev").addEventListener("click", () => { if (cur > 0) { cur--; draw2(); } });
-  SA.$("#d2-next").addEventListener("click", () => { if (cur < STEPS.length - 1) { cur++; draw2(); } });
+  CL.$("#d2-flow").addEventListener("click", (e) => { const b = e.target.closest("button[data-i]"); if (b) { cur = +b.dataset.i; draw2(); } });
+  CL.$("#d2-prev").addEventListener("click", () => { if (cur > 0) { cur--; draw2(); } });
+  CL.$("#d2-next").addEventListener("click", () => { if (cur < STEPS.length - 1) { cur++; draw2(); } });
   draw2();
 });
 </script>

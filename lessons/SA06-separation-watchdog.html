@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>存算分离与 Watchdog · SA06</title>
-<link rel="stylesheet" href="assets/sa-lesson.css">
+<link rel="stylesheet" href="assets/course.css">
+<link rel="stylesheet" href="assets/course-theme.css">
 <script src="assets/glossary-data.js"></script>
-<script src="assets/sa-lib.js"></script>
+<script src="assets/course-config.js"></script>
+<script src="assets/course-lib.js"></script>
 <style>
   .btn.on { background: var(--brand); color: var(--surface); border-color: var(--brand); }
   .places { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0 6px; }
@@ -25,7 +27,7 @@
 </style>
 </head>
 <body>
-<header id="sa-topbar"></header>
+<header id="cl-topbar"></header>
 
 <div class="layout">
 <aside class="toc">
@@ -239,13 +241,13 @@
   </div>
 </section>
 
-<nav id="sa-pager" data-current="SA06-separation-watchdog.html"></nav>
+<nav id="cl-pager" data-current="SA06-separation-watchdog.html"></nav>
 <p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§5、§6（2026-10-31）。标为“补充”的内容和模拟演示是课程作者的解释，不是原文观点。</p>
 </main>
 </div>
 
 <script>
-SA.onReady(function () {
+CL.onReady(function () {
   /* ---- 1. 三种绑定方式 ---- */
   const TASKS = [
     { id: "T1", name: "修复 CI 失败", env: "laptop", need: "需要笔记本上未提交的修改" },
@@ -276,7 +278,7 @@ SA.onReady(function () {
   }
   const it = (cls, txt) => '<span class="it ' + cls + '">' + txt + "</span>";
   function draw1() {
-    SA.$$("#demo1 [data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
+    CL.$$("#demo1 [data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
     let P = "";
     if (mode === "A") {
       P += place("云端", true, ['<span class="data-note">（未使用）</span>']);
@@ -294,21 +296,21 @@ SA.onReady(function () {
       P += place("云端托管机", true, [it("env", "环境：托管/按需环境"), it("", "端侧 daemon")]);
       P += place("个人设备", device, [it("env", "环境：特定硬件"), it("", "端侧 daemon")]);
     }
-    SA.$("#d1-places").innerHTML = P;
-    SA.$("#d1-laptop").textContent = laptop ? "笔记本合盖 / 离线" : "笔记本开盖 / 上线";
-    SA.$("#d1-device").textContent = device ? "个人设备下线" : "个人设备上线";
+    CL.$("#d1-places").innerHTML = P;
+    CL.$("#d1-laptop").textContent = laptop ? "笔记本合盖 / 离线" : "笔记本开盖 / 上线";
+    CL.$("#d1-device").textContent = device ? "个人设备下线" : "个人设备上线";
     let T = "<tr><th>任务</th><th>需要的环境</th><th>状态</th></tr>";
     for (const t of TASKS) { const [c, s] = taskState(t); T += "<tr><td>" + t.id + " " + t.name + "</td><td>" + ENVNAME[t.env] + "（" + t.need + "）</td><td class=\"" + c + "\">" + s + "</td></tr>"; }
-    SA.$("#d1-tasks").innerHTML = T;
+    CL.$("#d1-tasks").innerHTML = T;
     const ok = TASKS.filter((t) => taskState(t)[0] === "ok").length;
-    SA.$("#d1-out").textContent =
+    CL.$("#d1-out").textContent =
       "部署方式：" + { A: "① 本地单机", B: "② 只做第一步 + 沙箱重建（原文认为不理想的思路 A）", C: "③ 两步都做（端侧 daemon）" }[mode] +
       "\nAgent 能响应新消息：" + (agentOnline() ? "是" : "否（设备离线即停止运行）") +
       "\n能正常推进的任务：" + ok + " / " + TASKS.length +
       "\n事件记录：" + (log.length ? log.slice(-4).join(" → ") : "（无）");
   }
-  SA.$$("#demo1 [data-mode]").forEach((b) => b.addEventListener("click", () => { mode = b.dataset.mode; restarted = false; draw1(); }));
-  SA.$$("#demo1 [data-ev]").forEach((b) => b.addEventListener("click", () => {
+  CL.$$("#demo1 [data-mode]").forEach((b) => b.addEventListener("click", () => { mode = b.dataset.mode; restarted = false; draw1(); }));
+  CL.$$("#demo1 [data-ev]").forEach((b) => b.addEventListener("click", () => {
     const ev = b.dataset.ev;
     if (ev === "reset") { laptop = true; device = false; restarted = false; log.length = 0; }
     if (ev === "laptop") { laptop = !laptop; log.push(laptop ? "笔记本上线" : "笔记本离线"); }
@@ -332,12 +334,12 @@ SA.onReady(function () {
   ];
   const enabled = new Set(FAULTS.map((f) => f.id));
   let wmode = "wd";
-  SA.$("#d2-faults").innerHTML = "注入故障：" + FAULTS.map((f) => '<label><input type="checkbox" data-f="' + f.id + '" checked> ' + f.w + " · " + f.name + "（第 " + f.at + " 分）</label>").join("");
+  CL.$("#d2-faults").innerHTML = "注入故障：" + FAULTS.map((f) => '<label><input type="checkbox" data-f="' + f.id + '" checked> ' + f.w + " · " + f.name + "（第 " + f.at + " 分）</label>").join("");
   function firstTick(t, P) { return Math.ceil(t / P) * P; }
   function draw2() {
-    const P = +SA.$("#d2-p").value, H = +SA.$("#d2-h").value;
-    SA.$("#d2-pv").textContent = P; SA.$("#d2-hv").textContent = H;
-    SA.$$("#demo2 [data-wmode]").forEach((b) => b.classList.toggle("on", b.dataset.wmode === wmode));
+    const P = +CL.$("#d2-p").value, H = +CL.$("#d2-h").value;
+    CL.$("#d2-pv").textContent = P; CL.$("#d2-hv").textContent = H;
+    CL.$$("#demo2 [data-wmode]").forEach((b) => b.classList.toggle("on", b.dataset.wmode === wmode));
     const ticks = []; for (let t = P; t <= T2; t += P) ticks.push(t);
     const lanes = [], rows = [];
     let stuck = 0;
@@ -373,13 +375,13 @@ SA.onReady(function () {
       }
       lanes.push({ name: f.w, segs, ticks: wmode === "wd" ? ticks : [] });
     }
-    SA.lanes("#d2-lanes", lanes, { t1: T2, unit: " 分" });
-    SA.$("#d2-out").textContent = (wmode === "wd" ? "Watchdog Session（每 " + P + " 分钟一次定时检查）" : "存活探测 + 报错告警（人工响应 " + H + " 分钟）") +
+    CL.lanes("#d2-lanes", lanes, { t1: T2, unit: " 分" });
+    CL.$("#d2-out").textContent = (wmode === "wd" ? "Watchdog Session（每 " + P + " 分钟一次定时检查）" : "存活探测 + 报错告警（人工响应 " + H + " 分钟）") +
       "\n" + (rows.length ? rows.join("\n") : "（未注入故障）") + "\n任务累计卡住：" + stuck + " 分钟";
   }
-  SA.$$("#d2-faults input").forEach((c) => c.addEventListener("change", () => { if (c.checked) enabled.add(c.dataset.f); else enabled.delete(c.dataset.f); draw2(); }));
-  SA.$$("#demo2 [data-wmode]").forEach((b) => b.addEventListener("click", () => { wmode = b.dataset.wmode; draw2(); }));
-  ["#d2-p", "#d2-h"].forEach((id) => SA.$(id).addEventListener("input", draw2));
+  CL.$$("#d2-faults input").forEach((c) => c.addEventListener("change", () => { if (c.checked) enabled.add(c.dataset.f); else enabled.delete(c.dataset.f); draw2(); }));
+  CL.$$("#demo2 [data-wmode]").forEach((b) => b.addEventListener("click", () => { wmode = b.dataset.wmode; draw2(); }));
+  ["#d2-p", "#d2-h"].forEach((id) => CL.$(id).addEventListener("input", draw2));
   draw2();
 });
 </script>

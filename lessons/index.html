@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Super-agent 设计课</title>
-<link rel="stylesheet" href="assets/sa-lesson.css">
+<link rel="stylesheet" href="assets/course.css">
+<link rel="stylesheet" href="assets/course-theme.css">
 <script src="assets/glossary-data.js"></script>
-<script src="assets/sa-lib.js"></script>
+<script src="assets/course-config.js"></script>
+<script src="assets/course-lib.js"></script>
 <style>
   .wrap { max-width: 1120px; margin: 0 auto; padding: 24px 16px 80px; }
   .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; margin-top: 20px; }
@@ -48,7 +50,7 @@
 </style>
 </head>
 <body>
-<header id="sa-topbar"></header>
+<header id="cl-topbar"></header>
 <div class="wrap">
   <div class="hero">
     <div class="kicker">互动课程 · 4 步 9 课</div>
@@ -97,17 +99,17 @@ const DESC = {
   "SA08-prototype.html": "开源原型的领域模型、授权与接受模式（off / observe / auto）、执行与面板；与文章设计的差距。",
   "SA09-open-problems.html": "扩展双层架构、脱离 Session 的人机协作、上下文边界与 A2A、安全与隐私；全课复盘。",
 };
-SA.onReady(function () {
-  const v = SA.visited(), N = SA.LESSONS.length, done = SA.LESSONS.filter((l) => v.includes(l.file)).length;
-  const nextL = SA.LESSONS.find((l) => !v.includes(l.file));
+CL.onReady(function () {
+  const v = CL.visited(), N = CL.LESSONS.length, done = CL.LESSONS.filter((l) => v.includes(l.file)).length;
+  const nextL = CL.LESSONS.find((l) => !v.includes(l.file));
   const cta = document.getElementById("cta");
   if (done && nextL) { cta.href = nextL.file; cta.textContent = "继续学习：第 " + String(nextL.no).padStart(2, "0") + " 课 →"; }
-  else if (done === N) { cta.href = SA.LESSONS[0].file; cta.textContent = "全部学完 · 从头复习 →"; }
+  else if (done === N) { cta.href = CL.LESSONS[0].file; cta.textContent = "全部学完 · 从头复习 →"; }
   document.getElementById("hero-prog").innerHTML = '<span class="bar"><i style="width:' + Math.round((100 * done) / N) + '%"></i></span>已学 ' + done + " / " + N + " 课";
-  if (done) { const rb = SA.resetButton(() => location.reload()); rb.style.color = "inherit"; document.getElementById("hero-prog").appendChild(rb); }
+  if (done) { const rb = CL.resetButton(() => location.reload()); rb.style.color = "inherit"; document.getElementById("hero-prog").appendChild(rb); }
   let p = "", h = "";
-  for (const st of SA.STEPS) {
-    const ls = SA.LESSONS.filter((l) => l.step === st.n), d = ls.filter((l) => v.includes(l.file)).length;
+  for (const st of CL.STEPS) {
+    const ls = CL.LESSONS.filter((l) => l.step === st.n), d = ls.filter((l) => v.includes(l.file)).length;
     p += '<a class="stage" href="#step-' + st.n + '"><span class="n">' + st.n + "</span><b>" + st.name + "</b><p>" + st.desc +
       '</p><span class="go"><span>查看 ' + ls.length + " 课 ↓</span><em>" + (d ? "已学 " + d : "") + "</em></span></a>";
     h += '<section class="step-sec" id="step-' + st.n + '"><div class="step-head"><span class="n">' + st.n + "</span><div><h2>第 " + st.n + " 步 · " + st.name + "</h2><p>" + st.desc + '</p></div></div><ol class="lrows">';

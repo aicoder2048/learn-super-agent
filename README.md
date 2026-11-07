@@ -9,7 +9,7 @@
 
 | | AI 助教 | AI 讲师（语音讲课） |
 |---|---|---|
-| 是什么 | 右栏的答疑助手，读过原文和本课全文 | 打开 Chrome 带你走读课程：滚动高亮、亲手操作演示、语音讲解，讲完自动进入下一课 |
+| 是什么 | 右栏的答疑助手，读过原文和本课全文（讲原型的课还附原型设计文档）；能画流程图、把对话整理成笔记 | 打开 Chrome 带你走读课程：滚动高亮、亲手操作演示、语音讲解，讲完自动进入下一课 |
 | 怎么用 | 你自己读课，随时选中段落或点图片/演示上的“问 AI” | 坐着听；随时可暂停、跳步、插话问助教 |
 | 能否单独用 | **可以**，只开课程就有，不需要讲师 | 依赖 AI 助教（讲师会公开向助教提问） |
 | 需要 | `DEEPSEEK_API_KEY` | `DEEPSEEK_API_KEY` + Chrome；建议先预合成音频 |
@@ -113,8 +113,9 @@ cd lessons && uv run --no-project python tools/course.py [--lecture SA02] [--por
 1. 按 1 → 4 步顺序学，每课先看“学完本课，你能够”。
 2. 对照原文图（点击放大），动手玩演示，留意页面标明的简化假设。
 3. 做课末自测；不懂的词悬停虚线看定义，或打开顶栏“术语表”。
-4. 问 AI 助教：选中段落点“问 AI”，或点图片/演示右上角的“问 AI”（会带上截图和当前参数）。
-5. 顶栏可切换浅色 / 深色 / 水墨主题。进度和对话只存在本机浏览器。
+4. 问 AI 助教：选中段落点“问 AI”，或点图片/演示右上角的“问 AI”（会带上截图和当前参数）。拖动助教栏左边缘可调宽度（双击恢复）。
+5. 记笔记：助教栏点“记笔记”，勾选几段对话，点“整理为笔记”（约半分钟，也按量计费）。笔记是 Markdown，存在 `lessons/study-notes/`（不进 git），可直接放进 Obsidian；顶栏“学习笔记”页可浏览、复制、下载或打印。
+6. 顶栏可切换浅色 / 深色 / 水墨主题。进度和对话只存在本机浏览器。
 
 ## 常见问题
 
@@ -129,16 +130,17 @@ cd lessons && uv run --no-project python tools/course.py [--lecture SA02] [--por
 ```bash
 just lecture-check            # 讲稿自检：对照真实页面检查元素、演示和自测题，不启动服务、不调模型
 just lecture SA02 --port 9000 # 单独启动讲师（课程服务需先在另一终端运行）
-cd lessons && uv run --no-project --with playwright python tools/check_page.py index.html glossary.html SA0*.html --theme dark
+cd lessons && uv run --no-project --with playwright python tools/check_page.py index.html glossary.html notes.html SA0*.html --theme dark
+cd lessons && uv run --no-project python tools/serve.py --check   # 每课附带的资料、未登记的引用、来源漂移
 ```
 
-课程编写规范见 `lessons/AUTHORING.md`，讲稿写法见 `lessons/lecturer/AUTHORING.md`。
+课程编写规范见 `lessons/AUTHORING.md`（含来源快照、勘误和框架升级），讲稿写法见 `lessons/lecturer/AUTHORING.md`。课程框架来自 interactive-courseware 模板，升级用它的 `sync_course.py`。
 
 ```
 lessons/
-  index.html  glossary.html  SA01–SA09 *.html
-  assets/            公用样式、脚本、AI 助教、术语表
-  tools/             serve.py（本地服务 + DeepSeek 转发）、course.py（启动入口）、fetch_article.py 等
+  index.html  glossary.html  notes.html  SA01–SA09 *.html
+  assets/            course-config.js（课程配置）、course-lib.js / course-tutor.js / course.css（框架）、术语表
+  tools/             serve.py（本地服务 + DeepSeek 转发）、sources.json（助教资料清单）、course.py（启动入口）、fetch_article.py 等
   lecturer/          AI 讲师：讲稿 scripts/、语音 tts.py、音频缓存 audio/
   .env.sample        API key 模板
 docs/articles/prototype-docs/   dsh-superagent-prototype 设计文档存档（MIT）

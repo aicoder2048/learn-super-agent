@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>为什么需要 Super-agent · SA01</title>
-<link rel="stylesheet" href="assets/sa-lesson.css">
+<link rel="stylesheet" href="assets/course.css">
+<link rel="stylesheet" href="assets/course-theme.css">
 <script src="assets/glossary-data.js"></script>
-<script src="assets/sa-lib.js"></script>
+<script src="assets/course-config.js"></script>
+<script src="assets/course-lib.js"></script>
 <style>
   .arch [data-mod] { cursor: pointer; transition: opacity .2s; }
   .arch .tag { font-family: var(--mono); font-size: 11px; fill: var(--accent); font-weight: 700; }
@@ -15,7 +17,7 @@
 </style>
 </head>
 <body>
-<header id="sa-topbar"></header>
+<header id="cl-topbar"></header>
 
 <div class="layout">
 <aside class="toc">
@@ -221,17 +223,17 @@
   </div>
 </section>
 
-<nav id="sa-pager" data-current="SA01-why-super-agent.html"></nav>
+<nav id="cl-pager" data-current="SA01-why-super-agent.html"></nav>
 <p class="disclaimer">原文：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》§1（2026-10-31）。标为“补充”的内容和模拟演示是课程作者的解释，不是原文观点。</p>
 </main>
 </div>
 
 <script>
-SA.onReady(function () {
+CL.onReady(function () {
   /* ---- 1. 注意力瓶颈模拟 ---- */
   const H = 1.5, T = 120, SHOW = 60;
   function simulate(n, a, s, seed) {
-    const r = SA.rng(seed);
+    const r = CL.rng(seed);
     const lanes = Array.from({ length: n }, (_, k) => ({ name: "Session " + (k + 1), segs: [] }));
     const human = { name: "你", segs: [] };
     // 每个 Session：工作 → 进入等待队列 → 被你处理 → 继续工作
@@ -261,21 +263,21 @@ SA.onReady(function () {
     return { lanes, human, util: humanBusy / T, agentWork, agentWait, cycles };
   }
   function draw1() {
-    const n = +SA.$("#d1-n").value, a = +SA.$("#d1-a").value, s = +SA.$("#d1-s").value;
-    SA.$("#d1-nv").textContent = n; SA.$("#d1-av").textContent = a; SA.$("#d1-sv").textContent = s.toFixed(1);
+    const n = +CL.$("#d1-n").value, a = +CL.$("#d1-a").value, s = +CL.$("#d1-s").value;
+    CL.$("#d1-nv").textContent = n; CL.$("#d1-av").textContent = a; CL.$("#d1-sv").textContent = s.toFixed(1);
     const res = simulate(n, a, s, 7);
     const clip = (segs) => segs.filter((g) => g.t0 < SHOW).map((g) => Object.assign({}, g, { t1: Math.min(g.t1, SHOW) }));
-    SA.lanes("#d1-lanes", [{ name: "你（人）", segs: clip(res.human.segs) }].concat(res.lanes.map((l) => ({ name: l.name, segs: clip(l.segs) }))), { t1: SHOW, unit: " 分" });
+    CL.lanes("#d1-lanes", [{ name: "你（人）", segs: clip(res.human.segs) }].concat(res.lanes.map((l) => ({ name: l.name, segs: clip(l.segs) }))), { t1: SHOW, unit: " 分" });
     // 扫一遍 1..10，找出“再加一个 Session，产出增长不到 10%”的点
     const curve = []; for (let k = 1; k <= 10; k++) curve.push(simulate(k, a, s, 7).agentWork);
     let knee = 10; for (let k = 1; k < 10; k++) if (curve[k] < curve[k - 1] * 1.1) { knee = k; break; }
-    SA.$("#d1-out").textContent =
-      "2 小时内：Agent 干活 " + SA.fmt(res.agentWork, 0) + " 分钟，停着等你 " + SA.fmt(res.agentWait, 0) + " 分钟（" + SA.fmt((100 * res.agentWait) / Math.max(1, res.agentWork + res.agentWait), 0) + "%）\n" +
-      "你的时间利用率 " + SA.fmt(res.util * 100, 0) + "%，共处理 " + res.cycles + " 次\n" +
-      "产出曲线（Session 数 1→10 的 Agent 干活分钟）：" + curve.map((x) => SA.fmt(x, 0)).join(" · ") + "\n" +
+    CL.$("#d1-out").textContent =
+      "2 小时内：Agent 干活 " + CL.fmt(res.agentWork, 0) + " 分钟，停着等你 " + CL.fmt(res.agentWait, 0) + " 分钟（" + CL.fmt((100 * res.agentWait) / Math.max(1, res.agentWork + res.agentWait), 0) + "%）\n" +
+      "你的时间利用率 " + CL.fmt(res.util * 100, 0) + "%，共处理 " + res.cycles + " 次\n" +
+      "产出曲线（Session 数 1→10 的 Agent 干活分钟）：" + curve.map((x) => CL.fmt(x, 0)).join(" · ") + "\n" +
       "在当前参数下，大约开到 " + knee + " 个 Session 后，再加一个，产出增长不到 10%。";
   }
-  ["#d1-n", "#d1-a", "#d1-s"].forEach((id) => SA.$(id).addEventListener("input", draw1));
+  ["#d1-n", "#d1-a", "#d1-s"].forEach((id) => CL.$(id).addEventListener("input", draw1));
   draw1();
 
   /* ---- 2. 特征 ↔ 模块 ---- */
@@ -287,20 +289,20 @@ SA.onReady(function () {
     "5": ["计算、状态与环境的分离（§5）", "支撑持久。Agent Loop 上云、状态进数据库、执行环境用端侧 daemon 原地接入。→ SA06"],
     "6": ["Watchdog（§6）", "支撑持久。主系统外的独立 Agent 会话，用定时消息驱动，监控基础设施和任务进展。→ SA06"],
   };
-  const groups = SA.$$("#demo2 [data-mod]"), out2 = SA.$("#d2-out");
+  const groups = CL.$$("#demo2 [data-mod]"), out2 = CL.$("#d2-out");
   function show(mods, label) {
     groups.forEach((g) => { const on = !mods || mods.includes(g.dataset.mod); g.querySelector("rect").classList.toggle("hl", !!mods && on); g.style.opacity = on ? 1 : 0.3; });
     out2.textContent = label;
   }
-  SA.$$("#demo2 [data-trait]").forEach((b) => b.addEventListener("click", () => {
-    SA.$$("#demo2 [data-trait]").forEach((x) => x.classList.toggle("on", x === b));
+  CL.$$("#demo2 [data-trait]").forEach((b) => b.addEventListener("click", () => {
+    CL.$$("#demo2 [data-trait]").forEach((x) => x.classList.toggle("on", x === b));
     const t = b.dataset.trait;
     if (!t) return show(null, "五个模块共同支撑四个特征。点一个特征，看它靠哪些模块。");
     const mods = TRAIT[t];
     show(mods, "特征「" + t + "」由以下模块支撑：\n" + mods.map((m) => "· " + MOD[m][0] + "：" + MOD[m][1]).join("\n"));
   }));
   groups.forEach((g) => g.addEventListener("click", () => {
-    SA.$$("#demo2 [data-trait]").forEach((x) => x.classList.remove("on"));
+    CL.$$("#demo2 [data-trait]").forEach((x) => x.classList.remove("on"));
     const m = g.dataset.mod; show([m], MOD[m][0] + "\n" + MOD[m][1]);
   }));
   show(null, "五个模块共同支撑四个特征。点一个特征，看它靠哪些模块。");
