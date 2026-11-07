@@ -118,6 +118,12 @@ class Stage:
         """另一路音频：朗读学生自己提问的回答，不影响讲师暂停中的那段。"""
         await self.page.evaluate("u => __lecturer.playAside(u)", f"{self.base}lecturer/audio/{audio.name}")
 
+    async def pause_aside(self) -> None:
+        await self.page.evaluate("__lecturer.pauseAside()")
+
+    async def resume_aside(self) -> None:
+        await self.page.evaluate("__lecturer.resumeAside()")
+
     async def stop_aside(self) -> None:
         await self.page.evaluate("__lecturer.stopAside()")
 
@@ -155,8 +161,14 @@ class Stage:
         await box.evaluate("el => el.blur()")  # 交还焦点，让快捷键继续生效
         return before
 
-    async def tutor_answer_count(self) -> int:
-        return await self.page.locator(".tutor-panel .tp-msg.ai").count()
+    async def tutor_last(self) -> tuple[int, str]:
+        """（助教回答条数，最后一条回答的 data-id）。「重新发送」时条数不变、id 会变。"""
+        return tuple(await self.page.evaluate(
+            """() => {
+              const msgs = document.querySelectorAll('.tutor-panel .tp-msg.ai');
+              const m = msgs[msgs.length - 1];
+              return [msgs.length, m ? (m.dataset.id || '') : ''];
+            }"""))
 
     async def tutor_answer(self, before: int) -> tuple[str, bool, str]:
         """读新回答：（目前的正文，是否已答完，错误信息）。"""

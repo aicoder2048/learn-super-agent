@@ -58,8 +58,9 @@
       if (e.key === "Escape") { e.target.blur(); e.preventDefault(); }
       return; // 输入框里打字时快捷键不生效
     }
-    const cmd = { " ": "toggle", ArrowRight: "next", ArrowLeft: "prev", r: "reexplain", R: "reexplain" }[e.key];
+    const cmd = { " ": "toggle", Escape: "stop", ArrowRight: "next", ArrowLeft: "prev", r: "reexplain", R: "reexplain" }[e.key];
     if (!cmd) return;
+    if (cmd === "stop") { send(cmd); return; } // Esc 不拦截：页面还要用它关放大图
     e.preventDefault(); e.stopPropagation();
     const b = document.querySelector('.lecturer-bar button[data-cmd="' + cmd + '"]');
     if (!b || !b.disabled) send(cmd);
@@ -86,6 +87,8 @@
         aside.play().catch(() => finishAside());
       });
     },
+    pauseAside() { aside.pause(); },
+    resumeAside() { if (asideEnded) aside.play().catch(() => finishAside()); },
     stopAside() { aside.pause(); finishAside(); },
     highlight(sel, nth) {
       document.querySelectorAll(".lecturer-focus").forEach((x) => x.classList.remove("lecturer-focus"));

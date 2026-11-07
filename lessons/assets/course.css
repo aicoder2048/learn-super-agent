@@ -399,7 +399,8 @@ a.term:hover { color: var(--brand-2); }
 .tp-msg.ai h4 { margin: 8px 0 2px; font-size: 15px; color: var(--brand); }
 .tp-msg.ai hr { border: 0; border-top: 1px dashed var(--line); }
 .tp-msg.ai .tp-tbl { font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; }
-.tp-err { color: var(--down); font-size: 13.5px; margin-top: 4px; }
+.tp-err { color: var(--ink-2); font-size: 13.5px; margin-top: 6px; padding: 6px 10px; border-left: 3px solid var(--warn-bd); background: var(--warn-bg); border-radius: 4px; }
+.tp-err .tp-retry { margin-left: 6px; padding: 2px 10px; font-size: 13px; }
 .tp-dots { color: var(--ink-3); } .tp-dots::after { content: "…"; animation: tpblink 1s steps(2) infinite; }
 .tp-caret { display: inline-block; width: 7px; height: 15px; background: var(--accent); vertical-align: -2px; margin-left: 2px; animation: tpblink .9s steps(2) infinite; }
 @keyframes tpblink { 50% { opacity: 0; } }

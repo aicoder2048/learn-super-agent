@@ -146,11 +146,11 @@
           context: { title: lesson.id + " " + lesson.title, lessonText: (document.querySelector("main") || document.body).innerText } }),
       });
       const j = await r.json().catch(() => ({ error: "HTTP " + r.status }));
-      if (!r.ok || !j.ok) throw new Error(j.error || "HTTP " + r.status);
+      if (!r.ok || !j.ok) throw new Shown(j.error || "课程服务没有正常回应，可以再点一次「整理为笔记」。");
       status.innerHTML = '✓ 已保存：<a href="notes.html#' + encodeURIComponent(j.file) + '" target="_blank">' + esc(j.file) + "</a>";
       picked = new Set(); render(); refreshPicked();
     } catch (e) {
-      status.innerHTML = '<span class="tp-err">⚠ ' + esc(e.message || e) + "</span>";
+      status.innerHTML = '<span class="tp-err">' + esc(e instanceof Shown ? e.message : friendly(e, false).replace("「重新发送」", "「整理为笔记」")) + "</span>";
     } finally { noteBusy = false; refreshPicked(); }
   }
 
@@ -242,6 +242,14 @@
   $(".tp-form").addEventListener("submit", (e) => { e.preventDefault(); if (busy) stop(); else ask(ta.value); });
   ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!busy) ask(ta.value); } });
 
+  class Shown extends Error {}   // 服务端给的错误说明，原样显示
+  const RETRY_HINT = "可以点「重新发送」再试一次。";
+  function friendly(e, gotResponse) {
+    if (e instanceof Shown) return e.message;
+    console.warn("[AI 助教]", e);   // 原始错误留在控制台，方便排查
+    return gotResponse ? "回答中途断了。" + RETRY_HINT : "连不上本地课程服务。请确认 serve.py 还在运行，然后点「重新发送」。";
+  }
+
   async function ask(q) {
     q = (q || "").trim(); if (!q || busy) return;
     if (!document.body.classList.contains("tutor-open")) open();
@@ -250,17 +258,19 @@
     if (ctx.needImage) { const card = ctx.needImage; delete ctx.needImage; ctx.image = await CL.snapshot(card); if (!ctx.image) delete ctx.image; }
     const meta = [ctx.chart ? "🖼 " + chartName((pending && pending.chartCard) || visibleCard(currentSection()) || document.body) : "", ctx.selection ? "❝ " + ctx.selection.slice(0, 60) : "", ctx.image ? "已附截图" : ""].filter(Boolean).join(" · ");
     history.push({ role: "user", content: q, meta });
-    const ans = { role: "assistant", content: "", streaming: true };
+    const ans = { role: "assistant", content: "", streaming: true, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) };   // 讲师按 id 认新回答
     history.push(ans);
     ta.value = ""; pending = null; imgChk.checked = false; updateWhere();
     busy = true; sendBtn.textContent = "停止"; render();
     ctrl = new AbortController();
+    let gotResponse = false;
     try {
       const res = await fetch("/api/tutor/chat", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
         body: JSON.stringify({ lesson: LESSON, context: ctx, messages: history.slice(0, -1).slice(-30).map((m) => ({ role: m.role, content: m.content })) }),
       });
-      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || "HTTP " + res.status); }
+      gotResponse = true;
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Shown(j.error || "课程服务没有正常回应。" + RETRY_HINT); }
       const rd = res.body.getReader(), dec = new TextDecoder(); let buf = "";
       for (;;) {
         const { value, done } = await rd.read(); if (done) break;
@@ -273,13 +283,13 @@
           if (d.thinking && !ans.content) ans.thinking = true;
           if (d.t) { ans.content += d.t; ans.thinking = false; }
           if (d.tool) { (ans.tools = ans.tools || []).push(d.tool); }   // 助教联网：搜索词 / 读取的网址
-          if (d.error) throw new Error(d.error);
+          if (d.error) throw new Shown(d.error);
           if (d.done && d.usage) ans.usage = d.usage.total_tokens;
           renderLast();
         }
       }
     } catch (e) {
-      if (e.name !== "AbortError") ans.error = String(e.message || e);
+      if (e.name !== "AbortError") ans.error = friendly(e, gotResponse);
     } finally {
       ans.streaming = false; ans.thinking = false; busy = false; ctrl = null; sendBtn.textContent = "发送";
       if (!ans.content && !ans.error) ans.error = "已停止";
@@ -287,6 +297,13 @@
     }
   }
   function stop() { if (ctrl) ctrl.abort(); }
+  function resend() {
+    const n = history.length, ans = history[n - 1], q = history[n - 2];
+    if (busy || !ans || !ans.error || !q || q.role !== "user") return;
+    history.splice(n - 2, 2);
+    ask(q.content);
+  }
+  msgsEl.addEventListener("click", (e) => { if (e.target.closest(".tp-retry")) resend(); });
 
   async function checkServer() {
     if (!isHttp) { serverOk = false; render(); return; }
@@ -330,8 +347,9 @@
     let body = text ? CL.md(text, { flat: true }) : m.thinking ? '<span class="tp-dots">思考中</span>' : m.streaming ? '<span class="tp-dots">连接中</span>' : "";
     if (m.tools && m.tools.length) body = '<div class="tp-tools">' + m.tools.map((x) => "<div>" + esc(x) + "</div>").join("") + "</div>" + body;
     body += errata.map(errataHtml).join("");
-    if (m.error) body += '<div class="tp-err">⚠ ' + esc(m.error) + "</div>";
-    return '<div class="tp-msg ai' + pick + '">' + body + (m.streaming && m.content ? '<span class="tp-caret"></span>' : "") + "</div>";
+    if (m.error) body += '<div class="tp-err">' + esc(m.error) +
+      (i === history.length - 1 && !busy && !picking ? ' <button type="button" class="btn tp-retry">重新发送</button>' : "") + "</div>";
+    return '<div class="tp-msg ai' + pick + '"' + (m.id ? ' data-id="' + esc(m.id) + '"' : "") + ">" + body + (m.streaming && m.content ? '<span class="tp-caret"></span>' : "") + "</div>";
   }
 
   // 助教在回答末尾用 ```errata 代码块报告“课文与资料矛盾”。流式输出时未写完的块先隐藏。

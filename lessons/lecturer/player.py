@@ -27,25 +27,51 @@ class Lecture:
         self.i = 0
         self.speaker = "讲师"
         self.reexplain = False
-        self.known_answers = 0       # 已经处理过的助教回答条数
+        self.seen_answer = ""        # 最后处理过的助教回答 id（「重新发送」时条数不变，只能按 id 认）
+        self.poll = 0.5              # 检查右栏的间隔（秒）
         self.proxy_active = False    # 讲师正在代问，新回答不算学生的
         self.reading: asyncio.Task | None = None  # 正在朗读学生提问的回答
+        self.reading_on = asyncio.Event()  # 朗读没被学生按空格暂停
+        self.reading_on.set()
 
     # ---------- 状态显示 ----------
+    @property
+    def is_reading(self) -> bool:
+        return bool(self.reading and not self.reading.done())
+
     async def show(self, note: str = "") -> None:
         n = len(self.script.steps)
-        if self.controls.paused:
+        speaker, paused = self.speaker, self.controls.paused
+        if self.is_reading:  # 朗读学生提问的回答时，空格控制的是朗读
+            speaker, paused = "助教", not self.reading_on.is_set()
+            note = note or ("朗读已暂停 · 空格继续 · Esc 停止" if paused else "在回答你的问题 · 空格暂停 · Esc 停止")
+        elif paused:
             note = note or "已暂停 · 按空格继续"
-        text = f"<b>{self.speaker}</b> · 第 {min(self.i + 1, n)}/{n} 步" + (f" · {note}" if note else "")
+        text = f"<b>{speaker}</b> · 第 {min(self.i + 1, n)}/{n} 步" + (f" · {note}" if note else "")
         with contextlib.suppress(PlaywrightError):
-            await self.stage.status(text, self.controls.paused, can_reexplain=bool(self.rewriters))
+            await self.stage.status(text, paused, can_reexplain=bool(self.rewriters))
+
+    async def toggle_reading(self) -> None:
+        with contextlib.suppress(PlaywrightError):
+            if self.reading_on.is_set():
+                self.reading_on.clear()
+                await self.stage.pause_aside()
+            else:
+                self.reading_on.set()
+                await self.stage.resume_aside()
+        await self.show()
 
     async def on_command(self, cmd: str) -> None:
-        if self.reading and not self.reading.done():
-            await self.stop_reading()
-            if cmd == "toggle":  # 空格只打断朗读，讲课仍保持暂停
-                await self.show()
+        if self.is_reading:
+            if cmd == "toggle":  # 空格暂停/继续朗读，讲课仍保持暂停
+                await self.toggle_reading()
                 return
+            await self.stop_reading()
+            if cmd == "stop":  # Esc 停止朗读，讲课仍保持暂停
+                await self.show("朗读已停止 · 按空格继续讲课")
+                return
+        if cmd == "stop":
+            return
         was = self.controls.paused
         self.controls.command(cmd)
         if self.controls.paused != was:
@@ -84,11 +110,13 @@ class Lecture:
 
         watcher = asyncio.create_task(watch())
         self.speaker = "助教"
+        if aside:
+            await self.show()  # 一开始就提示怎么暂停，不等第一句合成完
         try:
             while (job := await queue.get()) is not None:
                 audio = await job
                 if aside:
-                    await self.show("在回答你的问题 · 空格停止朗读")
+                    await self.reading_on.wait()
                     await self.stage.play_aside(audio)
                 else:
                     await self.controls.wait_unpaused()
@@ -98,7 +126,8 @@ class Lecture:
             watcher.cancel()
             self.speaker = "讲师"
             if aside:
-                await self.show()
+                self.reading = None  # 读完了：状态栏回到讲课
+                await self.show("助教读完了 · 按空格继续讲课" if self.controls.paused else "")
 
     # ---------- 学生自己问助教 ----------
     async def stop_reading(self) -> None:
@@ -107,23 +136,25 @@ class Lecture:
             with contextlib.suppress(asyncio.CancelledError, PlaywrightError):
                 await self.reading
             self.reading = None
+        self.reading_on.set()
         with contextlib.suppress(PlaywrightError):
             await self.stage.stop_aside()
 
     async def watch_student_questions(self) -> None:
         """发现学生在右栏新问的问题，就朗读助教的回答；讲师正在讲时先暂停讲课。"""
-        self.known_answers = await self.stage.tutor_answer_count()
+        _, self.seen_answer = await self.stage.tutor_last()
         while True:
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(self.poll)
             try:
-                count = await self.stage.tutor_answer_count()
+                count, last = await self.stage.tutor_last()
             except PlaywrightError:  # 页面正在跳转，下一轮再看
                 continue
-            if self.proxy_active or count <= self.known_answers:
-                if not self.proxy_active:
-                    self.known_answers = min(self.known_answers, count)  # 学生清空过对话
+            if self.proxy_active or last == self.seen_answer:
                 continue
-            index, self.known_answers = self.known_answers, count
+            self.seen_answer = last
+            if not count or not last:  # 学生清空了对话
+                continue
+            index = count - 1
             await self.stop_reading()
             if not self.controls.paused:
                 self.controls.pause()
@@ -163,7 +194,7 @@ class Lecture:
             self.proxy_active = True
             try:
                 before = await self.stage.ask_tutor(step.question)
-                self.known_answers = before + 1
+                _, self.seen_answer = await self.stage.tutor_last()
             finally:
                 self.proxy_active = False
             await self.speak_tutor_answer(before)

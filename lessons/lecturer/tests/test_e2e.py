@@ -203,7 +203,13 @@ def test_student_question_answer_is_read_aloud(tmp_path):
             await asyncio.sleep(0.1)
         assert aside, "学生提问的回答没有被朗读"
         assert lec.controls.paused and lec.i == 0  # 讲课自动暂停，还停在原步骤
-        await stage.page.keyboard.press("Space")  # 只打断朗读
+        await stage.page.keyboard.press("Space")  # 暂停朗读
+        await asyncio.sleep(0.5)
+        assert lec.is_reading and not lec.reading_on.is_set()
+        await stage.page.keyboard.press("Space")  # 接着朗读
+        await asyncio.sleep(0.5)
+        assert lec.reading_on.is_set()
+        await stage.page.keyboard.press("Escape")  # 停止朗读
         await asyncio.sleep(0.5)
         assert lec.reading is None and lec.controls.paused
         await stage.page.keyboard.press("Space")  # 继续讲课

@@ -40,6 +40,38 @@ ROOT = LESSONS.parent                                    # 项目根目录（静
 MANIFEST = LESSONS / "tools" / "sources.json"
 SNAPDIR = LESSONS / "tools" / ".snapshots"              # file 类来源的快照副本（点目录不对外提供）
 API = "https://api.deepseek.com/chat/completions"
+
+RETRY_HINT = "可以点「重新发送」再试一次。"
+
+
+def friendly_error(e: Exception) -> str:
+    """把异常换成给学员看的一句话。原始错误由 log_error 写进服务日志。"""
+    if isinstance(e, urllib.error.HTTPError):
+        if e.code in (401, 403):
+            return "DeepSeek 不认这个 API key。请检查 .env 里的 DEEPSEEK_API_KEY。"
+        if e.code == 402:
+            return "DeepSeek 账户余额不足，充值后再发送。"
+        if e.code == 429:
+            return "向 DeepSeek 发送得太频繁了，稍等几秒。" + RETRY_HINT
+        if e.code >= 500:
+            return "DeepSeek 服务暂时出了问题，不是你的操作有误。过一会儿" + RETRY_HINT
+        return "DeepSeek 没有接受这次请求。" + RETRY_HINT
+    if isinstance(e, TimeoutError) or isinstance(getattr(e, "reason", None), TimeoutError):
+        return "DeepSeek 很久没有响应。" + RETRY_HINT
+    if isinstance(e, urllib.error.URLError):
+        return "连不上 DeepSeek，请检查网络。" + RETRY_HINT
+    return "回答中途断了。" + RETRY_HINT
+
+
+def log_error(where: str, e: Exception) -> None:
+    """完整错误只写进终端日志，方便排查。"""
+    detail = ""
+    if isinstance(e, urllib.error.HTTPError):
+        try:
+            detail = " " + e.read().decode("utf-8", "replace")[:500]
+        except Exception:
+            pass
+    sys.stderr.write(f"[{where}] {type(e).__name__}: {e}{detail}\n")
 NOTES = LESSONS / "study-notes"                         # “记笔记”整理出的 Markdown 笔记
 ERRATA = LESSONS / "errata.md"                           # 助教发现的疑似勘误
 ERRATA_LOCK = threading.Lock()                           # 多个回答同时结束时，串行改 errata.md
@@ -454,10 +486,9 @@ class Handler(SimpleHTTPRequestHandler):
             if choice.get("finish_reason") == "length":
                 body += "\n\n> ⚠ 笔记超出长度上限，结尾被截断。可以少选几条对话，再整理一次。\n"
             name = save_note(req, body, model)
-        except urllib.error.HTTPError as e:
-            return self._json(502, {"error": f"DeepSeek 返回 {e.code}: {e.read().decode('utf-8', 'replace')[:300]}"})
         except (urllib.error.URLError, TimeoutError) as e:
-            return self._json(502, {"error": f"连不上 DeepSeek: {getattr(e, 'reason', e)}"})
+            log_error("笔记", e)
+            return self._json(502, {"error": friendly_error(e).replace("「重新发送」", "「整理为笔记」")})
         except OSError as e:
             return self._json(500, {"error": f"写笔记文件失败: {e}"})
         sys.stderr.write(f"笔记已保存：{NOTES.name}/{name}\n")
@@ -498,11 +529,9 @@ class Handler(SimpleHTTPRequestHandler):
                 msgs = build_messages(req, with_image=False, web=web)
                 resp = self._open_upstream(key, msgs, tools=web)
                 note = "（当前模型不支持读图，已改用图片说明和读数回答）\n\n"
-        except urllib.error.HTTPError as e:
-            detail = e.read().decode("utf-8", "replace")[:500]
-            return self._json(502, {"error": f"DeepSeek 返回 {e.code}: {detail}"})
-        except urllib.error.URLError as e:
-            return self._json(502, {"error": f"连不上 DeepSeek: {e.reason}"})
+        except (urllib.error.URLError, TimeoutError) as e:
+            log_error("助教", e)
+            return self._json(502, {"error": friendly_error(e)})
 
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -572,8 +601,9 @@ class Handler(SimpleHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception as e:
+            log_error("助教", e)
             try:
-                send({"error": f"中途出错：{e}"})
+                send({"error": friendly_error(e)})
             except Exception:
                 pass
 
