@@ -169,7 +169,7 @@ class Stage:
               if (!m) return ['', false, ''];
               const c = m.cloneNode(true);
               const err = c.querySelector('.tp-err');
-              c.querySelectorAll('.tp-dots, .tp-caret, .tp-err, .tp-errata, pre, table, svg, .md-mermaid, .md-tbl, .tp-tbl').forEach(x => x.remove());  // 图、表、代码不朗读
+              c.querySelectorAll('.tp-dots, .tp-caret, .tp-err, .tp-errata, .tp-tools, pre, table, svg, .md-mermaid, .md-tbl, .tp-tbl').forEach(x => x.remove());  // 图、表、代码不朗读
               return [c.innerText, !busy, err ? err.innerText : ''];
             }""", before))
 

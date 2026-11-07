@@ -199,9 +199,9 @@
   function initChecklist() {
     document.querySelectorAll("ul.checklist li").forEach((li) => li.addEventListener("click", () => li.classList.toggle("checked")));
   }
-  // 原文配图点击放大
+  // 配图点击放大（任何 <figure> 里的 <img>）
   function initFigZoom() {
-    document.querySelectorAll("main .fig img").forEach((img) => img.addEventListener("click", () => {
+    document.querySelectorAll("main figure img").forEach((img) => img.addEventListener("click", () => {
       const z = document.createElement("div"); z.className = "fig-zoom"; z.innerHTML = '<img alt="">';
       z.firstChild.src = img.src; z.addEventListener("click", () => z.remove());
       document.addEventListener("keydown", function k(e) { if (e.key === "Escape") { z.remove(); document.removeEventListener("keydown", k); } });

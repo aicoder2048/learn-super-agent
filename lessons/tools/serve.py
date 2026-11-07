@@ -13,6 +13,7 @@ API key 只留在本机，不进浏览器；.env 和所有点文件都不对外�
     DEEPSEEK_API_KEY=...           必填
     DEEPSEEK_MODEL=deepseek-flash  可选
     DEEPSEEK_EFFORT=low            可选：low | high | max
+    DEEPSEEK_WEB=off               可选：关闭助教联网（默认开：DeepSeek Search / Fetch，每次成功请求约 0.00075 美元）
 
 计费提醒：DeepSeek 官方 API 按量计费（预充值）。
 """
@@ -32,6 +33,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 import sources as S
+import web as W
 
 LESSONS = Path(__file__).resolve().parent.parent        # 课程目录
 ROOT = LESSONS.parent                                    # 项目根目录（静态服务的根）
@@ -131,8 +133,10 @@ NOTE_SYSTEM = """你是一位专业的学习笔记整理师。学员在自学“
 """
 
 
-def system_prompt(course) -> str:
+def system_prompt(course, web: bool = False) -> str:
     rules = [*course.rules, f"今天是 {datetime.date.today().isoformat()}。不要编造资料之外的新进展。"]
+    if web:
+        rules.append(W.RULE)
     extra = "".join(f"{i}. {r}\n" for i, r in enumerate(rules, FIXED_RULES + 1))
     return SYSTEM.replace("{title}", course.title).replace("{persona}", course.persona) + extra
 
@@ -227,7 +231,7 @@ def clip(s, n: int) -> str:
     return s if len(s) <= n else s[:n] + "\n…（已截断）"
 
 
-def build_messages(req: dict, with_image: bool = True) -> list:
+def build_messages(req: dict, with_image: bool = True, web: bool = False) -> list:
     lesson = req.get("lesson", "")
     if lesson not in lesson_files():
         raise ValueError("unknown lesson")
@@ -239,7 +243,7 @@ def build_messages(req: dict, with_image: bool = True) -> list:
 
     course, sources = manifest()
     # 稳定前缀（system + 资料 + 课程全文），让 DeepSeek 的前缀缓存跨轮命中
-    system = system_prompt(course) + (
+    system = system_prompt(course, web) + (
         f"\n\n=== 本课：{clip(ctx.get('title'), 200)}（{lesson}）===\n"
         + sources_block(lesson_sources(lesson, course, sources)) + drift_block(lesson) +
         f"\n--- 课程页面全文（演示由页面 JS 实时计算，这里只有文字部分）---\n{clip(ctx.get('lessonText'), 50000)}\n"
@@ -411,7 +415,8 @@ class Handler(SimpleHTTPRequestHandler):
     def guess_type(self, path):  # 让浏览器直接显示 Markdown 原文
         return "text/plain; charset=utf-8" if str(path).endswith(".md") else super().guess_type(path)
 
-    def _open_upstream(self, key: str, msgs: list, stream: bool = True, max_tokens: int = 8000):
+    def _open_upstream(self, key: str, msgs: list, stream: bool = True, max_tokens: int = 8000,
+                       tools: bool = False, tool_choice: str | None = None):
         body = {
             "model": self.env.get("DEEPSEEK_MODEL", "deepseek-flash"),
             "messages": msgs,
@@ -419,6 +424,10 @@ class Handler(SimpleHTTPRequestHandler):
             "max_tokens": max_tokens,
             "reasoning_effort": self.env.get("DEEPSEEK_EFFORT", "low"),
         }
+        if tools:   # 联网工具；带 tools 时，本轮的 reasoning_content 要随 assistant 消息传回（见 web.py）
+            body["tools"] = W.TOOLS
+            if tool_choice:
+                body["tool_choice"] = tool_choice
         if stream:
             body["stream_options"] = {"include_usage": True}
         up = urllib.request.Request(API, json.dumps(body).encode(), {
@@ -472,20 +481,22 @@ class Handler(SimpleHTTPRequestHandler):
                 raise ValueError("bad request")
             if is_note:
                 return self._note(key, req)
-            msgs = build_messages(req)
+            web = W.enabled(self.env)
+            msgs = build_messages(req, web=web)
         except (ValueError, json.JSONDecodeError, OSError) as e:
             return self._json(400, {"error": str(e)})
 
         note = None
         try:
             try:
-                resp = self._open_upstream(key, msgs)
+                resp = self._open_upstream(key, msgs, tools=web)
             except urllib.error.HTTPError as e:
                 has_image = isinstance(msgs[-1]["content"], list)
                 if not (has_image and e.code in (400, 422)):
                     raise
                 # 模型不接受图片：去掉截图，只用图示说明和读数重试一次
-                resp = self._open_upstream(key, build_messages(req, with_image=False))
+                msgs = build_messages(req, with_image=False, web=web)
+                resp = self._open_upstream(key, msgs, tools=web)
                 note = "（当前模型不支持读图，已改用图片说明和读数回答）\n\n"
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:500]
@@ -501,30 +512,55 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(("data: " + json.dumps(obj, ensure_ascii=False) + "\n\n").encode())
             self.wfile.flush()
 
-        usage, thinking, answer = None, False, []
+        usage, thinking, answer, rounds = None, False, [], 0
+        post = W.make_post(key)
         try:
             if note:
                 send({"t": note})
-            with resp:
-                for raw in resp:
-                    line = raw.decode("utf-8", "replace").strip()
-                    if not line.startswith("data:"):
-                        continue
-                    data = line[5:].strip()
-                    if data == "[DONE]":
-                        break
-                    chunk = json.loads(data)
-                    usage = chunk.get("usage") or usage
-                    for ch in chunk.get("choices") or []:
-                        d = ch.get("delta") or {}
-                        if d.get("reasoning_content") and not thinking:
-                            thinking = True
-                            send({"thinking": True})
-                        if d.get("content"):
-                            answer.append(d["content"])
-                            send({"t": d["content"]})
-                        if ch.get("finish_reason") == "length":
-                            send({"t": "\n\n> ⚠ 回答超出长度上限，结尾被截断（末尾的勘误也可能丢失）。可以让助教“分两次讲”。"})
+            while True:   # 每一轮：流式读回答；模型要联网就执行工具、把结果交回去，再读下一轮
+                acc, reasoning, content = W.ToolCallAccumulator(), [], []
+                with resp:
+                    for raw in resp:
+                        line = raw.decode("utf-8", "replace").strip()
+                        if not line.startswith("data:"):
+                            continue
+                        data = line[5:].strip()
+                        if data == "[DONE]":
+                            break
+                        chunk = json.loads(data)
+                        if chunk.get("usage"):
+                            u = chunk["usage"]
+                            usage = u if usage is None else {**u, "total_tokens": usage.get("total_tokens", 0) + u.get("total_tokens", 0)}
+                        for ch in chunk.get("choices") or []:
+                            d = ch.get("delta") or {}
+                            if d.get("reasoning_content"):
+                                reasoning.append(d["reasoning_content"])
+                                if not thinking:
+                                    thinking = True
+                                    send({"thinking": True})
+                            if d.get("content"):
+                                content.append(d["content"])
+                                answer.append(d["content"])
+                                send({"t": d["content"]})
+                            if d.get("tool_calls"):
+                                acc.feed(d["tool_calls"])
+                            if ch.get("finish_reason") == "length":
+                                send({"t": "\n\n> ⚠ 回答超出长度上限，结尾被截断（末尾的勘误也可能丢失）。可以让助教“分两次讲”。"})
+                calls = acc.calls()
+                if not calls:
+                    break
+                rounds += 1
+                msgs.append({"role": "assistant", "content": "".join(content), "reasoning_content": "".join(reasoning), "tool_calls": calls})
+                if content:   # 模型在调用工具前说的话（“我查一下”），和后面的回答隔开
+                    answer.append("\n\n")
+                    send({"t": "\n\n"})
+                for c in calls:
+                    label, result = W.run_tool(c["function"]["name"], c["function"]["arguments"], post)
+                    sys.stderr.write(f"[联网] {label}\n")
+                    send({"tool": label})
+                    msgs.append({"role": "tool", "tool_call_id": c["id"], "content": result})
+                # 工具轮数用完：仍带 tools（思考模式的上下文要求），但禁止再调用，逼模型直接回答
+                resp = self._open_upstream(key, msgs, tools=True, tool_choice="none" if rounds >= W.MAX_ROUNDS else None)
             found = S.parse_errata("".join(answer), req["lesson"])
             new = []
             if found:

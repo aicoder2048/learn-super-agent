@@ -44,3 +44,38 @@ def test_stream_flush_empty_when_nothing_left():
     s = SentenceStream()
     s.feed("一句完整的话。")
     assert s.flush() == []
+
+
+def test_pronounce_replaces_whole_tokens_only():
+    from tts import apply_pronunciation
+    table = {"EMA": "E M A", "MA": "M A", "SPY": "S P Y", "NVDA": "英伟达", "IV": "隐含波动率"}
+    assert apply_pronunciation("EMA8 上穿 EMA21，MA50 托住 SPY。", table) == "E M A8 上穿 E M A21，M A50 托住 S P Y。"
+    assert apply_pronunciation("NVDA 的 IV 很高", table) == "英伟达 的 隐含波动率 很高"
+    # 词中间不替换：MACD 里的 MA、SPYX 里的 SPY、IVY 里的 IV 都不动
+    assert apply_pronunciation("MACD 和 SPYX、IVY", table) == "MACD 和 SPYX、IVY"
+
+
+def test_pronounce_prefers_longer_terms():
+    from tts import apply_pronunciation
+    assert apply_pronunciation("OR30 区间", {"OR": "O R", "OR30": "O R 30"}) == "O R 30 区间"
+
+
+def test_load_pronunciation_skips_notes_and_missing_file(tmp_path):
+    from tts import load_pronunciation
+    p = tmp_path / "pronounce.json"
+    assert load_pronunciation(p) == {}
+    p.write_text('{"_说明": "注释", "EMA": "E M A"}', encoding="utf-8")
+    assert load_pronunciation(p) == {"EMA": "E M A"}
+
+
+def test_synthesize_uses_spoken_form_for_cache_name(tmp_path, monkeypatch):
+    import asyncio
+    import tts
+    seen = []
+    async def fake_edge(text, voice, path):
+        seen.append(text); path.write_bytes(b"x")
+    monkeypatch.setattr(tts, "_edge", fake_edge)
+    monkeypatch.setattr(tts, "PRONOUNCE", {"EMA": "E M A"})
+    p = asyncio.run(tts.synthesize("看 EMA。", "v", tmp_path))
+    assert seen == ["看 E M A。"]
+    assert p.stem == tts.audio_name("v", "看 E M A。")

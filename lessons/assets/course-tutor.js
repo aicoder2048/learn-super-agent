@@ -188,7 +188,7 @@
     const sec = currentSection();
     const card = (pending && pending.chartCard) || (imgChk.checked && sec ? visibleCard(sec) : null);
     const scope = card || sec;
-    const readouts = scope ? [...scope.querySelectorAll(".readout, .chart-foot, table.tbl, figcaption, .diagram .cap, .diagram svg")].map((x) => (x.tagName.toLowerCase() === "svg" ? "【图示文字】" + [...x.querySelectorAll("text")].map((t) => t.textContent.trim()).filter(Boolean).join(" / ") : x.innerText.trim())).filter(Boolean).join("\n---\n") : "";
+    const readouts = scope ? [...scope.querySelectorAll(".readout, .chart-foot, table.tbl, figcaption, .diagram .cap, .diagram svg, figure svg")].map((x) => (x.tagName.toLowerCase() === "svg" ? "【图示文字】" + [...x.querySelectorAll("text")].map((t) => t.textContent.trim()).filter(Boolean).join(" / ") : x.innerText.trim())).filter(Boolean).join("\n---\n") : "";
     const ctx = {
       title: lesson.id + " " + lesson.title,
       lessonText: (document.querySelector("main") || document.body).innerText,
@@ -203,14 +203,16 @@
     return ctx;
   }
   function visibleCard(sec) {
-    const cards = [...sec.querySelectorAll(".chart-card, .fig, .diagram")];
+    const cards = [...sec.querySelectorAll(".chart-card, figure, .diagram")];
     let best = null, bestD = Infinity;
     for (const c of cards) { const r = c.getBoundingClientRect(); const d = Math.abs(r.top + r.height / 2 - window.innerHeight / 2); if (d < bestD) { bestD = d; best = c; } }
     return best;
   }
 
   /* ---------- 图表卡片上的“问 AI”按钮 ---------- */
-  document.querySelectorAll("main .chart-card, main .fig, main .diagram").forEach((card) => {
+  // 图卡：演示 .chart-card、SVG 图示 .diagram、任何 <figure>（原文配图 .fig 也是 figure）；嵌在别的图卡里的不重复加按钮
+  document.querySelectorAll("main .chart-card, main figure, main .diagram").forEach((card) => {
+    if (card.parentElement.closest(".chart-card, figure, .diagram")) return;
     const head = card.querySelector(".chart-head") || card; 
     const b = el("button", "btn tutor-ask", "问 AI"); b.type = "button"; b.title = "带着这张图（截图/图示文字 + 当前参数 + 读数）问 AI 助教";
     b.addEventListener("click", () => { pending = Object.assign(pending || {}, { chartCard: card }); imgChk.checked = true; open(); ta.value = ta.value || (card.classList.contains("chart-card") ? (CL.TUTOR_ASK_DEMO || "这个演示该怎么看？现在的结果说明了什么？") : (CL.TUTOR_ASK_FIG || "这张图该怎么看？它说明了本课的哪个设计点？")); ta.focus(); });
@@ -270,6 +272,7 @@
           const d = JSON.parse(line.slice(5));
           if (d.thinking && !ans.content) ans.thinking = true;
           if (d.t) { ans.content += d.t; ans.thinking = false; }
+          if (d.tool) { (ans.tools = ans.tools || []).push(d.tool); }   // 助教联网：搜索词 / 读取的网址
           if (d.error) throw new Error(d.error);
           if (d.done && d.usage) ans.usage = d.usage.total_tokens;
           renderLast();
@@ -305,7 +308,9 @@
       return;
     }
     if (!history.length) {
-      msgsEl.innerHTML = '<div class="tp-empty"><p>我读过本课的原文和全部内容。可以问我：</p><ul><li>没看懂的概念或句子（先在正文里选中它）</li><li>某张图或某个演示该怎么看（点它右上角的“问 AI”）</li><li>让我出题考你</li><li>这个设计和你熟悉的系统（操作系统、数据库、消息队列）有什么对应</li></ul><p class="data-note">回答由 ' + esc(model) + " 生成，可能出错；以原文为准。</p></div>";
+      // 空面板的提示：课程可在 course-config.js 用 CL.TUTOR_TIPS（列表项，纯文字）和 CL.TUTOR_NOTE（免责一句）替换
+      const tips = CL.TUTOR_TIPS || ["没看懂的概念或句子（先在正文里选中它）", "某张图或某个演示该怎么看（点它右上角的“问 AI”）", "让我出题考你", "这个设计和你熟悉的系统（操作系统、数据库、消息队列）有什么对应"];
+      msgsEl.innerHTML = '<div class="tp-empty"><p>我读过本课的原文和全部内容。可以问我：</p><ul>' + tips.map((t) => "<li>" + esc(t) + "</li>").join("") + '</ul><p class="data-note">回答由 ' + esc(model) + " 生成，可能出错；" + esc(CL.TUTOR_NOTE || "以原文为准。") + "</p></div>";
       return;
     }
     msgsEl.innerHTML = history.map(msgHtml).join("");
@@ -323,6 +328,7 @@
     if (m.role === "user") return '<div class="tp-msg user' + pick + '">' + (m.meta ? '<div class="tp-meta">' + esc(m.meta) + "</div>" : "") + "<div>" + esc(m.content).replace(/\n/g, "<br>") + "</div></div>";
     const { text, errata } = splitErrata(m.content || "");
     let body = text ? CL.md(text, { flat: true }) : m.thinking ? '<span class="tp-dots">思考中</span>' : m.streaming ? '<span class="tp-dots">连接中</span>' : "";
+    if (m.tools && m.tools.length) body = '<div class="tp-tools">' + m.tools.map((x) => "<div>" + esc(x) + "</div>").join("") + "</div>" + body;
     body += errata.map(errataHtml).join("");
     if (m.error) body += '<div class="tp-err">⚠ ' + esc(m.error) + "</div>";
     return '<div class="tp-msg ai' + pick + '">' + body + (m.streaming && m.content ? '<span class="tp-caret"></span>' : "") + "</div>";

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import asyncio
 import json
 import sys
@@ -40,14 +41,29 @@ def script_path(lesson_id: str, scripts_dir: Path = SCRIPTS) -> Path:
     return scripts_dir / f"{lesson_id.upper()}.json"
 
 
-def all_lessons(scripts_dir: Path = SCRIPTS) -> list[str]:
-    return sorted(p.stem for p in scripts_dir.glob("*.json"))
+COURSE_CONFIG = LESSONS / "assets" / "course-config.js"
 
 
-def lesson_sequence(first: str, scripts_dir: Path = SCRIPTS) -> list[str]:
-    """从 first 开始、按课号排序的所有有讲稿的课。讲完一课自动进入下一课。"""
+def course_order(config: Path = COURSE_CONFIG) -> list[str]:
+    """课程配置 CL.LESSONS 里的课号顺序（= 学习路线），大写。没有配置文件时为空。"""
+    try:
+        text = config.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    return [m.upper() for m in re.findall(r'\bid:\s*"([^"]+)"', text)]
+
+
+def all_lessons(scripts_dir: Path = SCRIPTS, config: Path = COURSE_CONFIG) -> list[str]:
+    """有讲稿的课：先按课程配置的学习路线排，配置里没有的按课号排在后面。"""
+    have = {p.stem.upper() for p in scripts_dir.glob("*.json")}
+    order = [i for i in course_order(config) if i in have]
+    return order + sorted(have - set(order))
+
+
+def lesson_sequence(first: str, scripts_dir: Path = SCRIPTS, config: Path = COURSE_CONFIG) -> list[str]:
+    """从 first 开始、按学习路线排序的所有有讲稿的课。讲完一课自动进入下一课。"""
     first = first.upper()
-    ids = all_lessons(scripts_dir)
+    ids = all_lessons(scripts_dir, config)
     if first not in ids:
         raise ScriptError(f"没有 {first} 的讲稿（{scripts_dir}）")
     return ids[ids.index(first):]

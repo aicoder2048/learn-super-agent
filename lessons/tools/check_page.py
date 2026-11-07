@@ -74,6 +74,10 @@ def main():
             for c in charts:
                 if c[1] == 0:
                     errors.append(f"demo did not render: #{c[0]}")
+            # 数据驱动课程的行情图（.chart 里由图表库画出 canvas）
+            for cid, ok in page.eval_on_selector_all(".chart", "els => els.map(e => [e.id, !!e.querySelector('canvas')])"):
+                if not ok:
+                    errors.append(f"chart did not render: #{cid}")
             imgs = page.eval_on_selector_all("main img", "els => els.map(e => [e.getAttribute('src'), e.naturalWidth])")
             for src, w in imgs:
                 if not w:

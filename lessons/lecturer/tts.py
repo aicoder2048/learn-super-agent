@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import re
 import sys
 from pathlib import Path
@@ -16,6 +17,32 @@ SAY_FALLBACK = {LECTURER_VOICE: "Eddy", TUTOR_VOICE: "Tingting"}
 AUDIO_DIR = Path(__file__).parent / "audio"
 _END = "。！？；!?;\n"
 _MIN_LEN = 4  # 短于这个长度的句子并到下一句，避免碎读
+
+
+PRONOUNCE_FILE = Path(__file__).parent / "pronounce.json"
+
+
+def load_pronunciation(path: Path = PRONOUNCE_FILE) -> dict[str, str]:
+    """课程的读音表：{"原词": "读法"}。以 _ 开头的键是注释。没有文件就是空表。"""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError as e:
+        raise SystemExit(f"读音表 {path} 不是合法 JSON：{e}") from e
+    return {k: str(v) for k, v in raw.items() if not k.startswith("_")}
+
+
+PRONOUNCE = load_pronunciation()
+
+
+def apply_pronunciation(text: str, table: dict[str, str]) -> str:
+    """把读音表里的词换成读法。只换完整的词：前后不能紧挨英文字母（可以紧挨数字，如 EMA8）。长词优先。"""
+    if not table:
+        return text
+    terms = sorted(table, key=len, reverse=True)
+    pat = re.compile(r"(?<![A-Za-z])(" + "|".join(map(re.escape, terms)) + r")(?![A-Za-z])")
+    return pat.sub(lambda m: table[m.group(1)], text)
 
 
 def audio_name(voice: str, text: str) -> str:
@@ -103,7 +130,7 @@ async def _say(text: str, voice: str, path: Path) -> None:
 
 async def synthesize(text: str, voice: str, out_dir: Path = AUDIO_DIR) -> Path:
     """返回音频文件路径。已缓存就直接用；edge-tts 失败时退回 macOS say。"""
-    text = clean_text(text)
+    text = apply_pronunciation(clean_text(text), PRONOUNCE)   # 缓存按读法命名：改了读音表会自动重新合成
     if not text:
         raise ValueError("要合成的文本是空的")
     out_dir.mkdir(parents=True, exist_ok=True)
