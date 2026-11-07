@@ -246,3 +246,32 @@ def test_answers_during_proxy_question_are_not_read():
         task.cancel()
     asyncio.run(go())
     assert read == []
+
+
+def test_closing_the_browser_while_reading_raises_nothing():
+    from playwright.async_api import Error as PlaywrightError
+
+    lec, stage = reading_lecture()
+
+    async def closed(index, aside=False):
+        raise PlaywrightError("Target page, context or browser has been closed")
+    lec.speak_tutor_answer = closed
+
+    async def go():
+        await lec.start_reading(0)
+        task = lec.reading
+        await asyncio.sleep(0)
+        assert task.done() and task.exception() is None
+
+    asyncio.run(go())
+
+
+def test_after_reading_the_bar_mentions_replay():
+    lec, stage = reading_lecture()
+
+    async def go():
+        await start_reading(lec)
+        await lec.on_command("next")
+
+    asyncio.run(go())
+    assert "🔊" in stage.notes[-1][0]

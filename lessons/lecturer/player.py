@@ -76,7 +76,7 @@ class Lecture:
                 await self.start_reading(self.reading_index)
             elif cmd in ("next", "stop"):
                 await self.stop_reading()
-                await self.show("已跳过朗读 · 按空格继续讲课")
+                await self.show("已跳过 · 空格继续讲课 · 🔊 可重听")
             return  # 朗读时“换个讲法”不生效
         if cmd == "stop":
             return
@@ -133,7 +133,7 @@ class Lecture:
             self.speaker = "讲师"
             if aside:
                 self.reading = None  # 读完了：状态栏回到讲课
-                await self.show("助教读完了 · 按空格继续讲课" if self.controls.paused else "")
+                await self.show("读完了 · 空格继续讲课 · 🔊 可重听" if self.controls.paused else "")
 
     # ---------- 学生自己问助教 ----------
     async def stop_reading(self) -> None:
@@ -156,8 +156,14 @@ class Lecture:
             with contextlib.suppress(PlaywrightError):
                 await self.stage.pause_audio()
         self.reading_index = index
-        self.reading = asyncio.create_task(self.speak_tutor_answer(index, aside=True))
+        self.reading = asyncio.create_task(self._read(index))
         await self.show()  # 一开始就换成朗读的控制条，不等第一句合成完
+
+    async def _read(self, index: int) -> None:
+        """朗读任务读完会把自己从 self.reading 摘掉，没人再 await 它：
+        浏览器关了、页面跳走了，就安静结束，不留“Task exception was never retrieved”。"""
+        with contextlib.suppress(PlaywrightError):
+            await self.speak_tutor_answer(index, aside=True)
 
     async def watch_student_questions(self) -> None:
         """发现学生在右栏新问的问题，就朗读助教的回答；讲师正在讲时先暂停讲课。"""

@@ -14,16 +14,17 @@
   .lecturer-bar button { all: unset; cursor: pointer; padding: 5px 9px; border-radius: 8px; background: rgba(255,255,255,.1); }
   .lecturer-bar button:hover { background: rgba(255,255,255,.22); }
   .lecturer-bar button[disabled] { opacity: .35; cursor: default; }
-  .lecturer-bar .who { min-width: 13em; max-width: 22em; padding: 0 6px; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lecturer-bar .who { min-width: 13em; max-width: 26em; padding: 0 6px; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lecturer-bar .who b { color: #f5c26b; font-weight: 600; }
   .lecturer-bar kbd { font: 11px ui-monospace, monospace; opacity: .6; margin-left: 3px; }
   .lecturer-bar.reading { background: rgba(24,52,64,.94); }
   .lecturer-bar.reading .rex { display: none; }
   .lecturer-bar.reading .who { max-width: 28em; }
-  /* 右栏每条助教回答上的重听按钮 */
-  .lecturer-replay { float: right; margin: -2px -4px 4px 8px; padding: 1px 7px; border: 1px solid currentColor; border-radius: 10px;
-    background: transparent; color: inherit; opacity: .55; font-size: 13px; line-height: 1.5; cursor: pointer; }
-  .lecturer-replay:hover { opacity: 1; }`;
+  /* 右栏每条助教回答底部的重听按钮：放底部，因为读完时长回答的顶部早已滚出视野 */
+  .lecturer-replay { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; padding: 4px 12px;
+    border: 1px solid var(--brand, #1f3a5f); border-radius: 999px; background: transparent; color: var(--brand, #1f3a5f);
+    font: 600 13px/1.4 -apple-system, "PingFang SC", sans-serif; cursor: pointer; }
+  .lecturer-replay:hover { background: var(--brand, #1f3a5f); color: var(--surface, #fff); }`;
 
   const audio = new Audio();
   let ended = null; // 当前这段音频播完时调用
@@ -83,8 +84,8 @@
     for (const m of answers()) {
       if (m.querySelector(":scope > .lecturer-replay") || !speakable(m)) continue;
       const b = document.createElement("button");
-      b.type = "button"; b.className = "lecturer-replay"; b.textContent = "🔊"; b.title = "让助教把这条回答读一遍";
-      m.prepend(b);
+      b.type = "button"; b.className = "lecturer-replay"; b.textContent = "🔊 朗读这条"; b.title = "让助教把这条回答读一遍";
+      m.append(b);
     }
   }
   let queued = false;
