@@ -30,7 +30,8 @@ class Lecture:
         self.seen_answer = ""        # 最后处理过的助教回答 id（「重新发送」时条数不变，只能按 id 认）
         self.poll = 0.5              # 检查右栏的间隔（秒）
         self.proxy_active = False    # 讲师正在代问，新回答不算学生的
-        self.reading: asyncio.Task | None = None  # 正在朗读学生提问的回答
+        self.reading: asyncio.Task | None = None  # 正在朗读的助教回答（插播：讲课保持暂停）
+        self.reading_index = 0                    # 正在朗读第几条助教回答
         self.reading_on = asyncio.Event()  # 朗读没被学生按空格暂停
         self.reading_on.set()
 
@@ -42,14 +43,16 @@ class Lecture:
     async def show(self, note: str = "") -> None:
         n = len(self.script.steps)
         speaker, paused = self.speaker, self.controls.paused
-        if self.is_reading:  # 朗读学生提问的回答时，空格控制的是朗读
+        reading = self.is_reading
+        if reading:  # 插播助教朗读时，按键控制的是朗读
             speaker, paused = "助教", not self.reading_on.is_set()
-            note = note or ("朗读已暂停 · 空格继续 · Esc 停止" if paused else "在回答你的问题 · 空格暂停 · Esc 停止")
+            note = note or ("已暂停 · 空格继续 · → 跳过" if paused else "朗读中 · 空格暂停 · → 跳过 · ← 重读")
         elif paused:
             note = note or "已暂停 · 按空格继续"
-        text = f"<b>{speaker}</b> · 第 {min(self.i + 1, n)}/{n} 步" + (f" · {note}" if note else "")
+        where = "" if reading else f" · 第 {min(self.i + 1, n)}/{n} 步"  # 朗读时提示更要紧，省掉步数
+        text = f"<b>{speaker}</b>{where}" + (f" · {note}" if note else "")
         with contextlib.suppress(PlaywrightError):
-            await self.stage.status(text, paused, can_reexplain=bool(self.rewriters))
+            await self.stage.status(text, paused, can_reexplain=bool(self.rewriters), reading=reading)
 
     async def toggle_reading(self) -> None:
         with contextlib.suppress(PlaywrightError):
@@ -62,14 +65,19 @@ class Lecture:
         await self.show()
 
     async def on_command(self, cmd: str) -> None:
-        if self.is_reading:
-            if cmd == "toggle":  # 空格暂停/继续朗读，讲课仍保持暂停
+        if cmd.startswith("replay:"):  # 🔊 重听某条助教回答
+            with contextlib.suppress(ValueError):
+                await self.start_reading(int(cmd.split(":", 1)[1]))
+            return
+        if self.is_reading:  # 插播中：按键只管朗读，不让讲课跳步
+            if cmd == "toggle":
                 await self.toggle_reading()
-                return
-            await self.stop_reading()
-            if cmd == "stop":  # Esc 停止朗读，讲课仍保持暂停
-                await self.show("朗读已停止 · 按空格继续讲课")
-                return
+            elif cmd == "prev":
+                await self.start_reading(self.reading_index)
+            elif cmd in ("next", "stop"):
+                await self.stop_reading()
+                await self.show("已跳过朗读 · 按空格继续讲课")
+            return  # 朗读时“换个讲法”不生效
         if cmd == "stop":
             return
         was = self.controls.paused
@@ -110,8 +118,6 @@ class Lecture:
 
         watcher = asyncio.create_task(watch())
         self.speaker = "助教"
-        if aside:
-            await self.show()  # 一开始就提示怎么暂停，不等第一句合成完
         try:
             while (job := await queue.get()) is not None:
                 audio = await job
@@ -140,6 +146,19 @@ class Lecture:
         with contextlib.suppress(PlaywrightError):
             await self.stage.stop_aside()
 
+    async def start_reading(self, index: int) -> None:
+        """插播朗读第 index 条助教回答：讲课先暂停，读完或跳过后仍保持暂停。"""
+        if self.proxy_active:  # 讲师正在代问，回答由讲师自己读
+            return
+        await self.stop_reading()
+        if not self.controls.paused:
+            self.controls.pause()
+            with contextlib.suppress(PlaywrightError):
+                await self.stage.pause_audio()
+        self.reading_index = index
+        self.reading = asyncio.create_task(self.speak_tutor_answer(index, aside=True))
+        await self.show()  # 一开始就换成朗读的控制条，不等第一句合成完
+
     async def watch_student_questions(self) -> None:
         """发现学生在右栏新问的问题，就朗读助教的回答；讲师正在讲时先暂停讲课。"""
         _, self.seen_answer = await self.stage.tutor_last()
@@ -154,12 +173,7 @@ class Lecture:
             self.seen_answer = last
             if not count or not last:  # 学生清空了对话
                 continue
-            index = count - 1
-            await self.stop_reading()
-            if not self.controls.paused:
-                self.controls.pause()
-                await self.stage.pause_audio()
-            self.reading = asyncio.create_task(self.speak_tutor_answer(index, aside=True))
+            await self.start_reading(count - 1)
 
     async def explain_again(self, step: Step) -> None:
         await self.show("在想另一种讲法…")

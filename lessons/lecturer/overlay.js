@@ -16,7 +16,14 @@
   .lecturer-bar button[disabled] { opacity: .35; cursor: default; }
   .lecturer-bar .who { min-width: 13em; max-width: 22em; padding: 0 6px; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lecturer-bar .who b { color: #f5c26b; font-weight: 600; }
-  .lecturer-bar kbd { font: 11px ui-monospace, monospace; opacity: .6; margin-left: 3px; }`;
+  .lecturer-bar kbd { font: 11px ui-monospace, monospace; opacity: .6; margin-left: 3px; }
+  .lecturer-bar.reading { background: rgba(24,52,64,.94); }
+  .lecturer-bar.reading .rex { display: none; }
+  .lecturer-bar.reading .who { max-width: 28em; }
+  /* 右栏每条助教回答上的重听按钮 */
+  .lecturer-replay { float: right; margin: -2px -4px 4px 8px; padding: 1px 7px; border: 1px solid currentColor; border-radius: 10px;
+    background: transparent; color: inherit; opacity: .55; font-size: 13px; line-height: 1.5; cursor: pointer; }
+  .lecturer-replay:hover { opacity: 1; }`;
 
   const audio = new Audio();
   let ended = null; // 当前这段音频播完时调用
@@ -49,13 +56,61 @@
     document.body.appendChild(bar);
   }
 
+  // 插播助教朗读时，⏮/⏭ 换成“从头读 / 跳过”
+  const LABELS = {
+    lecture: { prev: ["⏮", "上一步（←）"], next: ["⏭", "下一步（→）"], tog: "暂停/继续（空格）" },
+    reading: { prev: ["↺", "这条回答从头再读（←）"], next: ["⏭ 跳过", "跳过朗读，回到讲师（→ 或 Esc）"], tog: "暂停/继续朗读（空格）" },
+  };
+  function setMode(bar, reading) {
+    const L = LABELS[reading ? "reading" : "lecture"];
+    bar.classList.toggle("reading", reading);
+    for (const k of ["prev", "next"]) {
+      const b = bar.querySelector('[data-cmd="' + k + '"]');
+      b.textContent = L[k][0]; b.title = L[k][1];
+    }
+    bar.querySelector(".tog").title = L.tog;
+  }
+
+  // 🔊 重听：给右栏每条已经答完的助教回答加一个按钮（右栏会整块重绘，所以用 MutationObserver 补上）
+  function answers() { return [...document.querySelectorAll(".tutor-panel .tp-msg.ai")]; }
+  function speakable(m) {
+    if (m.querySelector(".tp-caret, .tp-dots")) return false;
+    const c = m.cloneNode(true);
+    c.querySelectorAll(".tp-err, .tp-tools, .tp-errata, .lecturer-replay, pre, table, svg").forEach((x) => x.remove());
+    return c.innerText.trim().length > 0;
+  }
+  function addReplayButtons() {
+    for (const m of answers()) {
+      if (m.querySelector(":scope > .lecturer-replay") || !speakable(m)) continue;
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "lecturer-replay"; b.textContent = "🔊"; b.title = "让助教把这条回答读一遍";
+      m.prepend(b);
+    }
+  }
+  let queued = false;
+  function watchAnswers() {   // 注入时页面还没有 DOM，等 DOMContentLoaded 再开始看
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; addReplayButtons(); });
+    }).observe(document.body, { childList: true, subtree: true });
+    addReplayButtons();
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest(".lecturer-replay"); if (!b) return;
+    e.preventDefault(); e.stopPropagation();   // 记笔记的勾选模式里，点它不算选中这条
+    send("replay:" + answers().indexOf(b.closest(".tp-msg.ai")));
+    b.blur();
+  }, true);
+
   function typing(t) {
     return t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
   }
   document.addEventListener("keydown", (e) => {
     if (e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
     if (typing(e.target)) {
-      if (e.key === "Escape") { e.target.blur(); e.preventDefault(); }
+      // Esc：离开输入框；正在朗读助教时顺便跳过朗读（不在朗读时 Python 那边会忽略）
+      if (e.key === "Escape") { e.target.blur(); e.preventDefault(); send("stop"); }
       return; // 输入框里打字时快捷键不生效
     }
     const cmd = { " ": "toggle", Escape: "stop", ArrowRight: "next", ArrowLeft: "prev", r: "reexplain", R: "reexplain" }[e.key];
@@ -98,13 +153,15 @@
       el.scrollIntoView({ behavior: "smooth", block: el.offsetHeight > innerHeight * 0.8 ? "start" : "center" });
       return true;
     },
-    status(html, paused, canReexplain) {
+    status(html, paused, canReexplain, reading) {
       mount();
       const bar = document.querySelector(".lecturer-bar");
+      setMode(bar, !!reading);
       bar.querySelector(".who").innerHTML = html;
       bar.querySelector(".tog").textContent = paused ? "▶" : "⏸";
       bar.querySelector(".rex").disabled = !canReexplain;
     },
   };
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount); else mount();
+  function ready() { mount(); watchAnswers(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready); else ready();
 })();

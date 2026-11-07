@@ -1,4 +1,4 @@
-"""学生提问的回答在朗读时：空格暂停/继续朗读，Esc 停止朗读。"""
+"""助教朗读是插播：空格暂停/继续，→/Esc 跳过，← 从头再读，🔊 重听任意一条；讲课始终保持暂停。"""
 
 import asyncio
 
@@ -11,8 +11,9 @@ class FakeStage:
     def __init__(self):
         self.notes, self.calls = [], []
 
-    async def status(self, html, paused, can_reexplain):
+    async def status(self, html, paused, can_reexplain, reading=False):
         self.notes.append((html, paused))
+        self.reading_mode = reading
 
     async def pause_aside(self):
         self.calls.append("pause_aside")
@@ -65,6 +66,85 @@ def test_second_space_resumes_reading():
     asyncio.run(go())
 
 
+def started(lec):
+    """把 speak_tutor_answer 换成一个读不完的假朗读，记下读的是第几条。"""
+    read = []
+
+    async def fake_read(index, aside=False):
+        read.append(index)
+        try:
+            await asyncio.Event().wait()
+        finally:
+            lec.reading = None
+    lec.speak_tutor_answer = fake_read
+    return read
+
+
+def test_right_arrow_skips_reading_without_jumping_a_step():
+    lec, stage = reading_lecture()
+
+    async def go():
+        await start_reading(lec)
+        await lec.on_command("next")
+        assert lec.reading is None and "stop_aside" in stage.calls
+        assert lec.controls.paused and lec.controls.take_jump() is None and lec.i == 0
+        assert "空格继续讲课" in stage.notes[-1][0]
+
+    asyncio.run(go())
+
+
+def test_left_arrow_rereads_the_same_answer():
+    lec, stage = reading_lecture()
+    read = started(lec)
+
+    async def go():
+        await lec.start_reading(3)
+        await asyncio.sleep(0)
+        await lec.on_command("prev")
+        await asyncio.sleep(0)
+        assert read == [3, 3] and lec.is_reading
+        assert lec.controls.take_jump() is None
+        lec.reading.cancel()
+
+    asyncio.run(go())
+
+
+def test_replay_button_reads_an_old_answer_and_pauses_the_lecture():
+    lec, stage = reading_lecture()
+    lec.controls.resume()  # 讲师正在讲
+    read = started(lec)
+    stage.pause_audio = lambda: asyncio.sleep(0, stage.calls.append("pause_audio"))
+
+    async def go():
+        await lec.on_command("replay:1")
+        await asyncio.sleep(0)
+        assert read == [1] and lec.is_reading
+        assert lec.controls.paused and "pause_audio" in stage.calls
+        assert stage.reading_mode is True
+        lec.reading.cancel()
+
+    asyncio.run(go())
+
+
+def test_reexplain_is_ignored_while_reading():
+    lec, stage = reading_lecture()
+
+    async def go():
+        await start_reading(lec)
+        await lec.on_command("reexplain")
+        assert lec.is_reading and lec.controls.take_jump() is None
+        lec.reading.cancel()
+
+    asyncio.run(go())
+
+
+def test_escape_when_not_reading_does_nothing():
+    lec, stage = reading_lecture()
+    lec.controls.resume()
+    asyncio.run(lec.on_command("stop"))
+    assert not lec.controls.paused and stage.calls == []
+
+
 def test_escape_stops_reading_and_keeps_lecture_paused():
     lec, stage = reading_lecture()
 
@@ -89,7 +169,8 @@ def test_reading_note_mentions_space_and_escape():
 
     asyncio.run(go())
     html, paused = stage.notes[-1]
-    assert "<b>助教</b>" in html and "空格暂停" in html and "Esc" in html and paused is False
+    assert "<b>助教</b>" in html and "空格暂停" in html and "→ 跳过" in html and paused is False
+    assert stage.reading_mode is True
 
 
 # ---------- 认出学生的新提问 ----------

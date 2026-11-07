@@ -34,7 +34,7 @@ class FakeStage:
     async def highlight(self, target, nth=0):
         return True
 
-    async def status(self, html, paused, can_reexplain):
+    async def status(self, html, paused, can_reexplain, reading=False):
         self.notes.append(html)
 
     async def play(self, audio):

@@ -97,8 +97,9 @@ class Stage:
     async def highlight(self, target: str, nth: int = 0) -> bool:
         return await self.page.evaluate("([s, n]) => __lecturer.highlight(s, n)", [target, nth])
 
-    async def status(self, html: str, paused: bool, can_reexplain: bool) -> None:
-        await self.page.evaluate("([h, p, r]) => __lecturer.status(h, p, r)", [html, paused, can_reexplain])
+    async def status(self, html: str, paused: bool, can_reexplain: bool, reading: bool = False) -> None:
+        """reading=True：正在插播助教朗读，控制条换成 ↺ 从头读 / ⏯ / ⏭ 跳过。"""
+        await self.page.evaluate("([h, p, r, t]) => __lecturer.status(h, p, r, t)", [html, paused, can_reexplain, reading])
 
     # ---------- 音频 ----------
     async def play(self, audio: Path) -> None:
@@ -181,7 +182,7 @@ class Stage:
               if (!m) return ['', false, ''];
               const c = m.cloneNode(true);
               const err = c.querySelector('.tp-err');
-              c.querySelectorAll('.tp-dots, .tp-caret, .tp-err, .tp-errata, .tp-tools, pre, table, svg, .md-mermaid, .md-tbl, .tp-tbl').forEach(x => x.remove());  // 图、表、代码不朗读
+              c.querySelectorAll('.tp-dots, .tp-caret, .tp-err, .lecturer-replay, .tp-errata, .tp-tools, pre, table, svg, .md-mermaid, .md-tbl, .tp-tbl').forEach(x => x.remove());  // 图、表、代码不朗读
               return [c.innerText, !busy, err ? err.innerText : ''];
             }""", before))
 

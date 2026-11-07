@@ -14,7 +14,7 @@ class FakeStage:
     async def wait_wandered(self):
         await self._never.wait()
 
-    async def status(self, html, paused, can_reexplain):
+    async def status(self, html, paused, can_reexplain, reading=False):
         self.notes.append(html)
 
 
